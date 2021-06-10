@@ -4,6 +4,17 @@ from dataclasses import dataclass
 import psycopg2
 import sys 
 
+# Переменные
+apiNews = 'https://api.ciu.nstu.ru/v1.0/news/schoolkids/' # апи новостей без года
+apiEmployee = "https://api.ciu.nstu.ru/v1.0/data/proj/teachers" # апи сотрудников
+apiHeader = "Http-Api-Key" # заголовок ключа запроса для апи сотрудников
+apiKey = "Y!@#13dft456DGWEv34g435f" # ключ запроса для апи сотрудников
+linkPerson = "https://ciu.nstu.ru/kaf/persons/" # ссылка на страницу сотрудника без id
+newsYear = '2021'
+
+listNews = []
+listEmployee = []
+
 @dataclass
 class News:
     """Структура новости"""
@@ -27,32 +38,36 @@ class Employee:
     id: int = 0
 
 
+def getConnection():
+    conn = psycopg2.connect(
+        database="news", 
+        user="newman", 
+        password="newman", 
+        host="localhost", 
+        port="5432")
+    return conn
 
-# Переменные
-apiNews = 'https://api.ciu.nstu.ru/v1.0/news/schoolkids/' # апи новостей без года
-apiEmployee = "https://api.ciu.nstu.ru/v1.0/data/proj/teachers" # апи сотрудников
-apiHeader = "Http-Api-Key" # заголовок ключа запроса для апи сотрудников
-apiKey = "Y!@#13dft456DGWEv34g435f" # ключ запроса для апи сотрудников
-linkPerson = "https://ciu.nstu.ru/kaf/persons/" # ссылка на страницу сотрудника без id
-newsYear = '2021'
 
-listNews = []
-listEmployee = []
-#==================================================================================
-#response = requests.get(apiNews+newsYear)
-#if response.status_code == 200:
-#    jsonList = response.json()
-#    if len(jsonList) > 0:
-#        for jsonElem in jsonList:
-#            listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], jsonElem['TEXT'], jsonElem['SHORTTEXT'], jsonElem['NEWS_DATE'])
-#            listNews.append(listElem)
-#    else:
-#        print('За ' + newsYear + ' год новостей нет!')
-#        sys.exit(1)
-#else:
-#    print('Ошибка: api новостей вернуло код: ' + response.status_code)
-#    sys.exit(1)
-#==================================================================================
+def getNews(api, year):
+    response = requests.get(api+year)
+    if response.status_code == 200:
+        jsonList = response.json()
+        if len(jsonList) > 0:
+            for jsonElem in jsonList:
+                listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], jsonElem['TEXT'], jsonElem['SHORTTEXT'], jsonElem['NEWS_DATE'])
+                listNews.append(listElem)
+            return listNews
+        else:
+            print('За ' + year + ' год новостей нет!')
+            return
+    else:
+        print('Ошибка: api новостей вернуло код: ' + response.status_code)
+        return
+
+def loadNewsDatabase():
+
+
+
 param = {apiHeader: apiKey,}
 response = requests.get(apiEmployee, headers={apiHeader:apiKey})
 if response.status_code == 200:
@@ -69,13 +84,7 @@ else:
     sys.exit(1)
 #==================================================================================
 
-conn = psycopg2.connect(
-    database="news", 
-    user="newman", 
-    password="newman", 
-    host="localhost", 
-    port="5432"
-)
+
 
 #==================================================================================
 #cur = conn.cursor()
@@ -84,6 +93,7 @@ conn = psycopg2.connect(
 #    data = (el.id, el.url, el.title_orig, el.text_orig, el.news_date)
 #    cur.execute(query, data)
 #    conn.commit()
+
 
 cur = conn.cursor()
 for el in listEmployee:
@@ -96,4 +106,10 @@ for el in listEmployee:
 
 conn.close()
 
+def main():
+    print("helloworld")
 
+
+
+if __name__ == "__main__":
+    main()
