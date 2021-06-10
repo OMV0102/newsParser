@@ -37,7 +37,7 @@ class Employee:
     chair_id2: int = 0
     id: int = 0
 
-
+#соеднинене с БД Postgres
 def getConnection():
     conn = psycopg2.connect(
         database="news", 
@@ -47,7 +47,7 @@ def getConnection():
         port="5432")
     return conn
 
-
+# получение новостей по апи в listNews
 def getNews(api, year):
     response = requests.get(api+year)
     if response.status_code == 200:
@@ -64,51 +64,59 @@ def getNews(api, year):
         print('Ошибка: api новостей вернуло код: ' + response.status_code)
         return
 
-def loadNewsDatabase():
-
-
-
-param = {apiHeader: apiKey,}
-response = requests.get(apiEmployee, headers={apiHeader:apiKey})
-if response.status_code == 200:
-    jsonList = response.json()
-    if len(jsonList) > 0:
-        for jsonElem in jsonList:
-            listElem = Employee(jsonElem['IDPERSON'], jsonElem['NAME'], jsonElem['SURNAME'], jsonElem['PATRONYMIC'], jsonElem['POST'], jsonElem['CHAIR_ID'], jsonElem['CHAIR_ID2'], jsonElem['ID'])
-            listEmployee.append(listElem)
+#загрузка полученных новостей из listNews в БД
+def loadNewsToDatabase(listNews):
+    if len(listNews) > 0:
+        conn = getConnection()
+        cur = conn.cursor()
+        for el in listNews:
+            query = "INSERT INTO public.news (id, url, title_orig, text_orig, news_date) VALUES (%s, %s, %s, %s, %s::TIMESTAMP)"
+            data = (el.id, el.url, el.title_orig, el.text_orig, el.news_date)
+            cur.execute(query, data)
+            conn.commit()
+        conn.close()
     else:
-        print('Список сотрудников, полученных по api, пуст!')
-        sys.exit(1)
-else:
-    print('Ошибка: api сотрудников вернуло код: ' + response.status_code)
-    sys.exit(1)
-#==================================================================================
+        print('Список сотрудников пуст: в базу данных загружать не буду')
+        return
+
+# получение новостей по апи в listEmployee
+def getEmployees(api, header, key):
+    response = requests.get(api, headers={header:key})
+    if response.status_code == 200:
+        jsonList = response.json()
+        if len(jsonList) > 0:
+            for jsonElem in jsonList:
+                listElem = Employee(jsonElem['IDPERSON'], jsonElem['NAME'], jsonElem['SURNAME'], jsonElem['PATRONYMIC'], jsonElem['POST'], jsonElem['CHAIR_ID'], jsonElem['CHAIR_ID2'], jsonElem['ID'])
+                listEmployee.append(listElem)
+        else:
+            print('Список сотрудников, полученных по api, пуст!')
+            return
+    else:
+        print('Ошибка: api сотрудников вернуло код: ' + response.status_code)
+        return
 
 
+#загрузка полученных новостей из listEmployee в БД
+def loadEmployeesToDatabase(listEmployee, link):
+    if len(listEmployee) > 0:
+        conn = getConnection()
+        cur = conn.cursor()
+        for el in listEmployee:
+            query = "INSERT INTO public.teachers (idperson, name, surname, patronymic, link_person, post, chair_id, chair_id2, id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            data = (el.idperson, el.name, el.surname, el.patronymic, link+str(el.idperson), el.post, el.chair_id, el.chair_id2, el.id)
+            cur.execute(query, data)
+            conn.commit()
+        conn.close()
+    else:
+        print('Список новостей пустой: в базу данных загружать не буду')
+        return
 
-#==================================================================================
-#cur = conn.cursor()
-#for el in listNews:
-#    query = "INSERT INTO public.news (id, url, title_orig, text_orig, news_date) VALUES (%s, %s, %s, %s, %s::TIMESTAMP)"
-#    data = (el.id, el.url, el.title_orig, el.text_orig, el.news_date)
-#    cur.execute(query, data)
-#    conn.commit()
-
-
-cur = conn.cursor()
-for el in listEmployee:
-    query = "INSERT INTO public.teachers (idperson, name, surname, patronymic, post, chair_id, chair_id2, id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-    data = (el.idperson, el.name, el.surname, el.patronymic, el.post, el.chair_id, el.chair_id2, el.id)
-    cur.execute(query, data)
-    conn.commit()
-
-
-
-conn.close()
 
 def main():
-    print("helloworld")
-
+    getNews(apiNews, newsYear)
+    loadNewsToDatabase(listNews)
+    getEmployees(apiEmployee, apiHeader, apiKey)
+    loadEmployeesToDatabase(listEmployee, linkPerson)
 
 
 if __name__ == "__main__":
