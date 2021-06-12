@@ -2,17 +2,36 @@ import requests
 from datetime import datetime
 from dataclasses import dataclass
 import psycopg2
-import sys 
+import sys
+
+from natasha import (
+    Segmenter,
+    MorphVocab,
+    
+    NewsEmbedding,
+    NewsMorphTagger,
+    NewsSyntaxParser,
+    NewsNERTagger,
+    
+    PER,
+    NamesExtractor,
+
+    Doc
+)
 
 @dataclass
 class News:
     """Структура новости"""
-    id: int
-    url: str
-    title_orig: str
-    text_orig: str
-    shorttext: str
-    news_date: str
+    id: int = 0
+    url: str = ''
+    title_orig: str = ''
+    text_orig: str = ''
+    shorttext: str = ''
+    news_date: str = ''
+    text_parse: str = ''
+    is_parse: bool = False
+    is_fio: bool = False
+    update_ts: str = ''
 
 @dataclass
 class Employee:
@@ -21,10 +40,17 @@ class Employee:
     name: str = ''
     surname: str = ''
     patronymic: str = ''
+    link_person: str = ''
     post: str = ''
     chair_id: int = 0
     chair_id2: int = 0
     id: int = 0
+    update_ts: str = ''
+
+@dataclass
+class newsMembers:
+    idnews: str = ''
+    idperson: str = ''
 
 #параметры подключения к БД
 def getConnectionParametrs():
@@ -36,7 +62,7 @@ def getConnectionParametrs():
 
     return pgDatabase, pgUser, pgPassword, pgHost ,pgPort
 
-#соеднинене с БД Postgres
+#соединение с БД Postgres
 def getConnection(database, user, password, host, port):
     isGoodExecution = True
     conn = None
@@ -53,7 +79,7 @@ def getConnection(database, user, password, host, port):
         return isGoodExecution, 'Не удалось подключиться к БД ' + database, conn
 
 # получение новостей по апи в listNews
-def getNews(api, year):
+def getNewsFromApi(api, year):
     isGoodExecution = True
     listNews = []
     try:
@@ -62,7 +88,7 @@ def getNews(api, year):
             jsonList = response.json() # получили элементы в список
             if len(jsonList) > 0:
                 for jsonElem in jsonList:
-                    listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], jsonElem['TEXT'], jsonElem['SHORTTEXT'], jsonElem['NEWS_DATE'])
+                    listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], jsonElem['TEXT'], jsonElem['SHORTTEXT'], jsonElem['NEWS_DATE'], '', False, False, '')
                     listNews.append(listElem)
 
                 return isGoodExecution, '', listNews
@@ -79,7 +105,6 @@ def getNews(api, year):
 def loadNewsToDatabase(listNews):
     isGoodExecution = True
     conn = None
-    num = 0
     try:
         pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
         isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
@@ -89,16 +114,19 @@ def loadNewsToDatabase(listNews):
             cur = conn.cursor()
             for el in listNews:
                 query = """INSERT INTO public.news
-                        (id, url, title_orig, text_orig, news_date)
+                        (id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts)
                         VALUES
-                        (%s, %s, %s, %s, %s::TIMESTAMP)
-                        ON CONFLICT (id) DO NOTHING;"""
-                data = (el.id, el.url, el.title_orig, el.text_orig, el.news_date)
+                        (%s, %s, %s, %s, %s, %s::TIMESTAMP, %s, %s, %s, DEFAULT)
+                        ON CONFLICT (id)
+                        WHERE is_parse = false
+                        DO UPDATE SET
+                        url = %s, title_orig = %s, text_orig = %s, shorttext = %s, news_date = %s::TIMESTAMP, update_ts = %s::TIMESTAMP;"""
+                data = (el.id, el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, el.text_parse, el.is_parse, el.is_fio,
+                               el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, str(datetime.now()))
                 cur.execute(query, data)
-                #conn.commit()
 
             if(conn != None):
-                conn.rollback()
+                conn.commit()
                 conn.close()
             return isGoodExecution, ''
 
@@ -107,7 +135,7 @@ def loadNewsToDatabase(listNews):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
 
     except Exception as errMessage:
         if(conn != None):
@@ -116,9 +144,8 @@ def loadNewsToDatabase(listNews):
         isGoodExecution = False
         return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage
 
-
-# получение новостей по апи в listEmployee
-def getEmployees(api, header, key):
+# получение сотрудников по апи в listEmployee
+def getEmployeesFromApi(api, header, key, link):
     isGoodExecution = True
     listEmployee = []
     try:
@@ -129,7 +156,7 @@ def getEmployees(api, header, key):
             if len(jsonList) > 0:
 
                 for jsonElem in jsonList:
-                    listElem = Employee(jsonElem['IDPERSON'], jsonElem['NAME'], jsonElem['SURNAME'], jsonElem['PATRONYMIC'], jsonElem['POST'], jsonElem['CHAIR_ID'], jsonElem['CHAIR_ID2'], jsonElem['ID'])
+                    listElem = Employee(jsonElem['IDPERSON'], jsonElem['NAME'], jsonElem['SURNAME'], jsonElem['PATRONYMIC'], link + str(jsonElem['IDPERSON']), jsonElem['POST'], jsonElem['CHAIR_ID'], jsonElem['CHAIR_ID2'], jsonElem['ID'], '')
                     listEmployee.append(listElem)
                 
                 return isGoodExecution, '', listEmployee
@@ -143,9 +170,8 @@ def getEmployees(api, header, key):
         isGoodExecution = False
         return isGoodExecution, errMessage, listEmployee
 
-
-#загрузка полученных новостей из listEmployee в БД
-def loadEmployeesToDatabase(listEmployee, link):
+#загрузка полученных сотрудников из listEmployee в БД
+def loadEmployeesToDatabase(listEmployee):
     isGoodExecution = True
     conn = None
     try:
@@ -157,18 +183,18 @@ def loadEmployeesToDatabase(listEmployee, link):
             cur = conn.cursor()
             for el in listEmployee:
                 query = """INSERT INTO public.teachers
-                        (idperson, name, surname, patronymic, link_person, post, chair_id, chair_id2, id)
+                        (idperson, name, surname, patronymic, link_person, post, chair_id, chair_id2, id, update_ts)
                         VALUES
-                        (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, DEFAULT)
                         ON CONFLICT (idperson)
                         DO UPDATE SET
-                        name = %s, surname = %s, patronymic = %s, link_person = %s, post = %s, chair_id = %s, chair_id2 = %s, id = %s;"""
-                data = (el.idperson, el.name, el.surname, el.patronymic, link+str(el.idperson), el.post, el.chair_id, el.chair_id2, el.id,
-                        el.name, el.surname, el.patronymic, link+str(el.idperson), el.post, el.chair_id, el.chair_id2, el.id)
+                        name = %s, surname = %s, patronymic = %s, link_person = %s, post = %s, chair_id = %s, chair_id2 = %s, id = %s, update_ts = %s::TIMESTAMP;"""
+                data = (el.idperson, el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2, el.id,
+                                     el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2, el.id, str(datetime.now()))
                 cur.execute(query, data)
-                #conn.commit()
+
             if(conn != None):
-                conn.rollback()
+                conn.commit()
                 conn.close()
             return isGoodExecution, ''
 
@@ -177,7 +203,7 @@ def loadEmployeesToDatabase(listEmployee, link):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
 
     except Exception as errMessage:
         if(conn != None):
@@ -186,12 +212,57 @@ def loadEmployeesToDatabase(listEmployee, link):
         isGoodExecution = False
         return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage
 
+#проверка ввода года новостей
+def checkYearNews(year):
+    return (year.isdigit() and int(year) >= 2007 and int(year) <= datetime.now().year)
+
+#получение новостей из БД кроме уже обработанных
+def getNewsFromDbExceptParsed():
+    isGoodExecution = True
+    listNews = []
+    conn = None
+    try:
+        pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
+        isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
+        if isGoodExecution == False:
+            raise ValueError('Не удалось подключиться к БД: \n' + message)
+        else:
+            cur = conn.cursor()
+            query = """
+                    SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
+                    FROM public.news
+                    WHERE is_parse = false;"""
+            cur.execute(query)
+            responseList = cur.fetchall()
+            for elem in responseList:
+                listElem = News(int(elem[0]), elem[1], elem[2], elem[3], elem[4], str(elem[5]), elem[6], bool(elem[7]), bool(elem[8]), str(elem[9]))
+                listNews.append(listElem)
+
+            if(conn != None):
+                conn.commit()
+                conn.close()
+            return isGoodExecution, '', listNews
+
+    except psycopg2.Error as errMessage:
+        if(conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary, listNews
+
+    except Exception as errMessage:
+        if(conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage, listNews
+
 
 
 def main():
     # Переменные
     apiNews = 'https://api.ciu.nstu.ru/v1.0/news/schoolkids/' # апи новостей без года
-    newsYear = '2021'
+    newsYear = str(datetime.now().year)
     apiEmployee = "https://api.ciu.nstu.ru/v1.0/data/proj/teachers" # апи сотрудников
     apiHeader = "Http-Api-Key" # заголовок ключа запроса для апи сотрудников
     apiKey = "Y!@#13dft456DGWEv34g435f" # ключ запроса для апи сотрудников
@@ -202,19 +273,50 @@ def main():
     errMessage = 'Сообщение'
 
     try:
-        isGoodExecution, errMessage, listNews = getNews(apiNews, newsYear)
-        if isGoodExecution == False: raise ValueError(errMessage)
-        isGoodExecution, errMessage = loadNewsToDatabase(listNews)
-        if isGoodExecution == False: raise ValueError(errMessage)
-        isGoodExecution, errMessage, listEmployee = getEmployees(apiEmployee, apiHeader, apiKey)
-        if isGoodExecution == False: raise ValueError(errMessage)
-        isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee, linkPerson)
-        if isGoodExecution == False: raise ValueError(errMessage)
+        choice = 0
+        print('Меню:\n')
+        print('<1> Загрузить новости с api')
+        print('<2> Загрузить сотрудников с api')
+        print('<3> Обработать новости за выбранный год')
+
+        choice = input('Выбор: ')
+        if choice.isdigit(): choice = int(choice)
+        else: choice = -1
+
+        if choice == 1:
+            year = input('Введите год, за который получить новости: ')
+            if (checkYearNews(year)) == False:
+                raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
+            else:
+                newsYear = year
+                isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, newsYear)
+                if isGoodExecution == False: raise ValueError(errMessage)
+                isGoodExecution, errMessage = loadNewsToDatabase(listNews)
+                if isGoodExecution == False: raise ValueError(errMessage)
+                print('Новости загружены.')
+
+        elif choice == 2:
+            isGoodExecution, errMessage, listEmployee = getEmployeesFromApi(apiEmployee, apiHeader, apiKey, linkPerson)
+            if isGoodExecution == False: raise ValueError(errMessage)
+            isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee)
+            if isGoodExecution == False: raise ValueError(errMessage)
+            print('Сотрудники загружены.')
+
+        elif choice == 3:
+            isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
+            if isGoodExecution == False: raise ValueError(errMessage)
+
+        elif choice == 0:
+            raise ValueError('Пользователь завершил работу программы.')
+
+        else:
+            raise ValueError('Действие не найдено.\nЗавершение работы...')
 
 
 
+        return ''
 
     except Exception as Message:
-        print(Message)
+        return Message
 
-main()
+print(main())
