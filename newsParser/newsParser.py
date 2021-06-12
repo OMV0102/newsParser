@@ -7,15 +7,12 @@ import sys
 from natasha import (
     Segmenter,
     MorphVocab,
-    
     NewsEmbedding,
     NewsMorphTagger,
     NewsSyntaxParser,
     NewsNERTagger,
-    
     PER,
     NamesExtractor,
-
     Doc
 )
 
@@ -49,8 +46,10 @@ class Employee:
 
 @dataclass
 class newsMembers:
-    idnews: str = ''
-    idperson: str = ''
+    idNews: str = ''
+    idPerson: str = ''
+    startPos: int = 0
+    stopPos: int = 0
 
 #параметры подключения к БД
 def getConnectionParametrs():
@@ -217,6 +216,7 @@ def checkYearNews(year):
     return (year.isdigit() and int(year) >= 2007 and int(year) <= datetime.now().year)
 
 #получение новостей из БД кроме уже обработанных
+#ЛИМИТ 2 для отладки
 def getNewsFromDbExceptParsed():
     isGoodExecution = True
     listNews = []
@@ -231,7 +231,9 @@ def getNewsFromDbExceptParsed():
             query = """
                     SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
                     FROM public.news
-                    WHERE is_parse = false;"""
+                    WHERE is_parse = false
+                    LIMIT 2
+                    ;"""
             cur.execute(query)
             responseList = cur.fetchall()
             for elem in responseList:
@@ -258,6 +260,12 @@ def getNewsFromDbExceptParsed():
         return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage, listNews
 
 
+def findFioInNewsByNatasha(listNews):
+
+    for elem in listNews:
+        print('')
+        doc2 = Doc(elem.text_orig)
+        print('')
 
 def main():
     # Переменные
@@ -273,15 +281,15 @@ def main():
     errMessage = 'Сообщение'
 
     try:
-        choice = 0
-        print('Меню:\n')
-        print('<1> Загрузить новости с api')
-        print('<2> Загрузить сотрудников с api')
-        print('<3> Обработать новости за выбранный год')
+        choice = 3
+        #print('Меню:\n')
+        #print('<1> Загрузить новости с api')
+        #print('<2> Загрузить сотрудников с api')
+        #print('<3> Обработать новости за выбранный год')
 
-        choice = input('Выбор: ')
-        if choice.isdigit(): choice = int(choice)
-        else: choice = -1
+        #choice = input('Выбор: ')
+        #if choice.isdigit(): choice = int(choice)
+        #else: choice = -1
 
         if choice == 1:
             year = input('Введите год, за который получить новости: ')
@@ -305,6 +313,10 @@ def main():
         elif choice == 3:
             isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
             if isGoodExecution == False: raise ValueError(errMessage)
+            findFioInNewsByNatasha(listNews)
+
+        elif choice == 4:
+            print('4 НЕТ')
 
         elif choice == 0:
             raise ValueError('Пользователь завершил работу программы.')
