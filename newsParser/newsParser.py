@@ -18,6 +18,7 @@ from natasha import Doc
 class NewsMember:
     idNews: str = ''
     idPerson: str = ''
+    linkPerson: str = ''
     startPos: int = 0
     stopPos: int = 0
     nameNorm: str = ''
@@ -251,6 +252,7 @@ def getNewsFromDbExceptParsed():
                     FROM public.news
                     WHERE is_parse = false
                     --AND id = 132165
+                    ORDER BY id
                     LIMIT 2
                     ;"""
             cur.execute(query)
@@ -282,8 +284,7 @@ def getNewsFromDbExceptParsed():
 def findFioInNewsByNatasha(listNews):
     isGoodExecution = True
     listNewsMember = []
-    errMessage = ''
-    #version1 = sys.version_info.major + '.' + sys.version_info.minor + '.' + sys.version_info.micro
+    #version1 = str(sys.version_info.major) + '.' + str(sys.version_info.minor) + '.' + str(sys.version_info.micro) # версия питона
 
     try:
         segmenter = Segmenter()
@@ -293,38 +294,46 @@ def findFioInNewsByNatasha(listNews):
         morph_tagger = NewsMorphTagger(emb)
         # syntax_parser = NewsSyntaxParser(emb)
         ner_tagger = NewsNERTagger(emb)
-
         names_extractor = NamesExtractor(morph_vocab)
 
-        for elem in listNews:
+        for elemNews in listNews:
             print('')
-            doc = Doc(elem.text_orig)
-            doc.segment(segmenter)
-            doc.tag_morph(morph_tagger)
+            flag_is_fio = False # флаг, что изначально фио нет в документе
+
+            doc = Doc(elemNews.text_orig) # создаем объект из текста
+            doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
+            doc.tag_morph(morph_tagger) # если это не сделать, но нормализация не сработает
             # doc.parse_syntax(syntax_parser)
-            doc.tag_ner(ner_tagger)
+            doc.tag_ner(ner_tagger) # разбивает документ на теги, чтобы появились spans в doc
 
             for span in doc.spans:
                 if span.type == 'PER':
-                    # span.extract_fact(names_extractor)
-                    span.normalize(morph_vocab)
-                    span.extract_fact(names_extractor)
+                    flag_is_fio = True # нашли хоть одно фио
+                    span.normalize(morph_vocab) # нормализует фио в span.normal
+                    span.extract_fact(names_extractor) # заполняет фио в span.fact по полям
+                    print('\n')
+                    name = span.fact.as_dict.get('first', '')
+                    surname = span.fact.as_dict.get('last', '')
+                    patronymic = span.fact.as_dict.get('middle', '')
+                    print('\n')
+
+                    elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic)
+                    print('\n')
 
             print('\n')
             print('\n')
             print('\n')
-            print('\n')
-            print('\n')
-            print('\n')
+
             return isGoodExecution, ''
 
-    except Exception as Message:
-        return isGoodExecution, Message
+    except Exception as errMessage:
+        isGoodExecution = False
+        return isGoodExecution, errMessage
 
 def main():
     # Переменные
     apiNews = 'https://api.ciu.nstu.ru/v1.0/news/schoolkids/'  # апи новостей без года
-    newsYear = str(datetime.now().year)
+    newsYear = '2021'
     apiEmployee = "https://api.ciu.nstu.ru/v1.0/data/proj/teachers"  # апи сотрудников
     apiHeader = "Http-Api-Key"  # заголовок ключа запроса для апи сотрудников
     apiKey = "Y!@#13dft456DGWEv34g435f"  # ключ запроса для апи сотрудников
@@ -333,57 +342,61 @@ def main():
     listNews = []  # сюда получаем новости с api
     listEmployee = []  # сюда получаем сотрудников с api
     errMessage = 'Сообщение'
+    flagMenu = True
 
-    try:
-        choice = 3
-        # print('Меню:\n')
-        # print('<1> Загрузить новости с api')
-        # print('<2> Загрузить сотрудников с api')
-        # print('<3> Обработать новости за выбранный год')
+    while flagMenu == True:
+        try:
+            choice = -1
+            print('\nМеню:')
+            print('<1> Загрузить новости с api')
+            print('<2> Загрузить сотрудников с api')
+            print('<3> Обработать новости за выбранный год')
 
-        # choice = input('Выбор: ')
-        # if choice.isdigit(): choice = int(choice)
-        # else: choice = -1
+            choice = input('Выбор: ')
+            if choice.isdigit(): choice = int(choice)
+            else: choice = -1
 
-        if choice == 1:
-            year = input('Введите год, за который получить новости: ')
-            if (checkYearNews(year)) == False:
-                raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
+            if choice == 1:
+                year = input('Введите год, за который получить новости: ')
+                if (checkYearNews(year)) == False:
+                    raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
+                else:
+                    newsYear = year
+                    print('Загрузка началась...')
+                    isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, newsYear)
+                    if isGoodExecution == False: raise ValueError(errMessage)
+                    isGoodExecution, errMessage = loadNewsToDatabase(listNews)
+                    if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Новости загружены.')
+
+            elif choice == 2:
+                print('Загрузка началась...')
+                isGoodExecution, errMessage, listEmployee = getEmployeesFromApi(apiEmployee, apiHeader, apiKey, linkPerson)
+                if isGoodExecution == False: raise ValueError(errMessage)
+                isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee)
+                if isGoodExecution == False: raise ValueError(errMessage)
+                print('Сотрудники загружены.')
+
+            elif choice == 3:
+                isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
+                if isGoodExecution == False: raise ValueError(errMessage)
+                isGoodExecution, errMessage = findFioInNewsByNatasha(listNews)
+                if isGoodExecution == False: raise ValueError(errMessage)
+
+            elif choice == 4:
+                print('4 НЕТ')
+
+            elif choice == 0:
+                flagMenu = False
+                raise ValueError('Пользователь завершил работу программы.')
+
             else:
-                newsYear = year
-                isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, newsYear)
-                if isGoodExecution == False: raise ValueError(errMessage)
-                isGoodExecution, errMessage = loadNewsToDatabase(listNews)
-                if isGoodExecution == False: raise ValueError(errMessage)
-                print('Новости загружены.')
+                raise ValueError('Действие не найдено.')
 
-        elif choice == 2:
-            isGoodExecution, errMessage, listEmployee = getEmployeesFromApi(apiEmployee, apiHeader, apiKey, linkPerson)
-            if isGoodExecution == False: raise ValueError(errMessage)
-            isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee)
-            if isGoodExecution == False: raise ValueError(errMessage)
-            print('Сотрудники загружены.')
 
-        elif choice == 3:
-            isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
-            if isGoodExecution == False: raise ValueError(errMessage)
-            isGoodExecution, errMessage = findFioInNewsByNatasha(listNews)
-            if isGoodExecution == False: raise ValueError(errMessage)
-
-        elif choice == 4:
-            print('4 НЕТ')
-
-        elif choice == 0:
-            raise ValueError('Пользователь завершил работу программы.')
-
-        else:
-            raise ValueError('Действие не найдено.\nЗавершение работы...')
-
-        return ''
-
-    except Exception as Message:
-        return Message
+        except Exception as Message:
+            print(Message)
 
 
 if __name__ == '__main__':
-    print(main())
+    main()
