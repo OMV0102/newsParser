@@ -376,6 +376,16 @@ def findFioInNewsByNatasha(listNews, listEmployee):
 
 def findEmployeeOnFio(listNewsMember, listEmployee):
 
+    isFind = False
+    for member in listNewsMember:
+        for employee in listEmployee:
+            if member.surnameNorm == employee.surname and member.nameNorm == employee.name:
+                isFind = True
+                member.idPerson = employee.idperson
+                member.linkPerson = employee.link_person
+
+
+
 
 
 def main():
