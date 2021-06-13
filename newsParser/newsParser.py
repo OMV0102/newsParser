@@ -217,6 +217,7 @@ def checkYearNews(year):
 
 #получение новостей из БД кроме уже обработанных
 #ЛИМИТ 2 для отладки
+#WHERE для отладки
 def getNewsFromDbExceptParsed():
     isGoodExecution = True
     listNews = []
@@ -232,7 +233,8 @@ def getNewsFromDbExceptParsed():
                     SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
                     FROM public.news
                     WHERE is_parse = false
-                    LIMIT 2
+                    AND id = 132165
+                    --LIMIT 2
                     ;"""
             cur.execute(query)
             responseList = cur.fetchall()
@@ -262,10 +264,54 @@ def getNewsFromDbExceptParsed():
 
 def findFioInNewsByNatasha(listNews):
 
-    for elem in listNews:
-        print('')
-        doc2 = Doc(elem.text_orig)
-        print('')
+    isGoodExecution = True
+    errMessage = ''
+
+    try:
+        segmenter = Segmenter()
+        morph_vocab = MorphVocab()
+
+        emb = NewsEmbedding()
+        morph_tagger = NewsMorphTagger(emb)
+        syntax_parser = NewsSyntaxParser(emb)
+        ner_tagger = NewsNERTagger(emb)
+
+        names_extractor = NamesExtractor(morph_vocab)
+
+
+        for elem in listNews:
+            print('')
+            doc = Doc(elem.text_orig)
+            doc.segment(segmenter)
+            doc.tag_morph(morph_tagger)
+            doc.parse_syntax(syntax_parser)
+            doc.tag_ner(ner_tagger)
+
+            # после сегментера
+            print(doc.tokens[:5])
+
+            print('\n')
+            print('\n')
+            # после сегментера
+            print(doc.sents[:5])
+
+            # после таг морфы
+            print(doc.tokens[:5])
+
+            for span in doc.spans:
+                span.normalize(morph_vocab)
+
+            print('\n')
+            print('\n')
+            print('\n')
+            print('\n')
+            print('\n')
+            print('\n')
+            return isGoodExecution, ''
+
+    except Exception as Message:
+        return isGoodExecution, Message
+
 
 def main():
     # Переменные
@@ -313,7 +359,8 @@ def main():
         elif choice == 3:
             isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
             if isGoodExecution == False: raise ValueError(errMessage)
-            findFioInNewsByNatasha(listNews)
+            isGoodExecution, errMessage = findFioInNewsByNatasha(listNews)
+            if isGoodExecution == False: raise ValueError(errMessage)
 
         elif choice == 4:
             print('4 НЕТ')
