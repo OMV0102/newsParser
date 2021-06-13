@@ -16,6 +16,7 @@ from natasha import Doc
 
 @dataclass
 class NewsMember:
+    """Структура найденного человека в новости"""
     idNews: str = ''
     idPerson: str = ''
     linkPerson: str = ''
@@ -24,7 +25,6 @@ class NewsMember:
     nameNorm: str = ''
     surnameNorm: str = ''
     patronymicNorm: str = ''
-
 
 @dataclass
 class News:
@@ -39,7 +39,6 @@ class News:
     is_parse: bool = False
     is_fio: bool = False
     update_ts: str = ''
-
 
 @dataclass
 class Employee:
@@ -165,8 +164,12 @@ def getEmployeesFromApi(api, header, key, link):
             if len(jsonList) > 0:
 
                 for jsonElem in jsonList:
+                    patronymic = ''
+                    if jsonElem['PATRONYMIC'] == None: patronymic = ''
+                    else: patronymic = jsonElem['PATRONYMIC']
+
                     listElem = Employee(jsonElem['IDPERSON'], jsonElem['NAME'], jsonElem['SURNAME'],
-                                        jsonElem['PATRONYMIC'], link + str(jsonElem['IDPERSON']), jsonElem['POST'],
+                                        patronymic, link + str(jsonElem['IDPERSON']), jsonElem['POST'],
                                         jsonElem['CHAIR_ID'], jsonElem['CHAIR_ID2'], jsonElem['ID'], '')
                     listEmployee.append(listElem)
 
@@ -180,7 +183,6 @@ def getEmployeesFromApi(api, header, key, link):
     except Exception as errMessage:
         isGoodExecution = False
         return isGoodExecution, errMessage, listEmployee
-
 
 # загрузка полученных сотрудников из listEmployee в БД
 def loadEmployeesToDatabase(listEmployee):
@@ -232,11 +234,52 @@ def checkYearNews(year):
 
     return (year.isdigit() and int(year) >= 2007 and int(year) <= datetime.now().year)
 
+# получение всех сотрудников из БД
+def getEmployeesFromDb():
+    isGoodExecution = True
+    listEmployee = []
+    conn = None
+    try:
+        pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
+        isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
+        if isGoodExecution == False:
+            raise ValueError('Не удалось подключиться к БД: \n' + message)
+        else:
+            cur = conn.cursor()
+            query = """
+                    SELECT idperson, name, surname, patronymic, link_person, post, chair_id, chair_id2, id, update_ts
+                    FROM public.teachers
+                    ORDER BY surname, name, patronymic
+                    ;"""
+            cur.execute(query)
+            responseList = cur.fetchall()
+            for elem in responseList:
+                listElem = Employee(int(elem[0]), elem[1], elem[2], elem[3], elem[4], elem[5], elem[6], elem[7], elem[8], str(elem[9]))
+                listEmployee.append(listElem)
+
+            if (conn != None):
+                conn.commit()
+                conn.close()
+            return isGoodExecution, '', listEmployee
+
+    except psycopg2.Error as errMessage:
+        if (conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при загрузке всех сотрудников из БД для обработки новостей:\n' + errMessage.diag.message_primary, listEmployee
+
+    except Exception as errMessage:
+        if (conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при загрузке всех сотрудников из БД для обработки новостей:\n' + errMessage, listEmployee
 
 # получение новостей из БД кроме уже обработанных
 # ЛИМИТ 2 для отладки
 # WHERE для отладки
-def getNewsFromDbExceptParsed():
+def getNewsFromDbExceptParsed(year):
     isGoodExecution = True
     listNews = []
     conn = None
@@ -250,16 +293,16 @@ def getNewsFromDbExceptParsed():
             query = """
                     SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
                     FROM public.news
-                    WHERE is_parse = false
-                    --AND id = 132165
+                    WHERE is_parse = false AND EXTRACT(YEAR FROM news_date)::text = %s
+                    AND id = 132165
                     ORDER BY id
-                    LIMIT 2
+                    --LIMIT 5
                     ;"""
-            cur.execute(query)
+            data = (year, )
+            cur.execute(query, data)
             responseList = cur.fetchall()
             for elem in responseList:
-                listElem = News(int(elem[0]), elem[1], elem[2], elem[3], elem[4], str(elem[5]), elem[6], bool(elem[7]),
-                                bool(elem[8]), str(elem[9]))
+                listElem = News(int(elem[0]), elem[1], elem[2], elem[3], elem[4], str(elem[5]), elem[6], bool(elem[7]), bool(elem[8]), str(elem[9]))
                 listNews.append(listElem)
 
             if (conn != None):
@@ -272,16 +315,16 @@ def getNewsFromDbExceptParsed():
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary, listNews
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage.diag.message_primary, listNews
 
     except Exception as errMessage:
         if (conn != None):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage, listNews
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage, listNews
 
-def findFioInNewsByNatasha(listNews):
+def findFioInNewsByNatasha(listNews, listEmployee):
     isGoodExecution = True
     listNewsMember = []
     #version1 = str(sys.version_info.major) + '.' + str(sys.version_info.minor) + '.' + str(sys.version_info.micro) # версия питона
@@ -303,7 +346,7 @@ def findFioInNewsByNatasha(listNews):
             doc = Doc(elemNews.text_orig) # создаем объект из текста
             doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
             doc.tag_morph(morph_tagger) # если это не сделать, но нормализация не сработает
-            # doc.parse_syntax(syntax_parser)
+            # doc.parse_syntax(syntax_parser) # not use
             doc.tag_ner(ner_tagger) # разбивает документ на теги, чтобы появились spans в doc
 
             for span in doc.spans:
@@ -318,6 +361,7 @@ def findFioInNewsByNatasha(listNews):
                     print('\n')
 
                     elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic)
+                    listNewsMember.append(elemNewsMember)
                     print('\n')
 
             print('\n')
@@ -330,10 +374,13 @@ def findFioInNewsByNatasha(listNews):
         isGoodExecution = False
         return isGoodExecution, errMessage
 
+def findEmployeeOnFio(listNewsMember, listEmployee):
+
+
+
 def main():
     # Переменные
     apiNews = 'https://api.ciu.nstu.ru/v1.0/news/schoolkids/'  # апи новостей без года
-    newsYear = '2021'
     apiEmployee = "https://api.ciu.nstu.ru/v1.0/data/proj/teachers"  # апи сотрудников
     apiHeader = "Http-Api-Key"  # заголовок ключа запроса для апи сотрудников
     apiKey = "Y!@#13dft456DGWEv34g435f"  # ключ запроса для апи сотрудников
@@ -361,9 +408,8 @@ def main():
                 if (checkYearNews(year)) == False:
                     raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
                 else:
-                    newsYear = year
                     print('Загрузка началась...')
-                    isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, newsYear)
+                    isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, year)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     isGoodExecution, errMessage = loadNewsToDatabase(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
@@ -378,10 +424,21 @@ def main():
                 print('Сотрудники загружены.')
 
             elif choice == 3:
-                isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed()
-                if isGoodExecution == False: raise ValueError(errMessage)
-                isGoodExecution, errMessage = findFioInNewsByNatasha(listNews)
-                if isGoodExecution == False: raise ValueError(errMessage)
+                year = '2021'
+                year = input('Введите год, за который обработать новости: ')
+                if (checkYearNews(year)) == False:
+                    raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
+                else:
+                    print('Загружаем всех сотрудников...')
+                    isGoodExecution, errMessage, listEmployee = getEmployeesFromDb()
+                    if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Загружаем необработанные новости за ' + str(year) + ' год ...')
+                    isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year)
+                    if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Обрабатываем новости...')
+                    isGoodExecution, errMessage = findFioInNewsByNatasha(listNews, listEmployee)
+                    if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Загружаем в БД обработанные новости за ' + str(year) + ' год ...')
 
             elif choice == 4:
                 print('4 НЕТ')
