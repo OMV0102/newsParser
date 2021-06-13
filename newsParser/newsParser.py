@@ -374,15 +374,31 @@ def findFioInNewsByNatasha(listNews, listEmployee):
         isGoodExecution = False
         return isGoodExecution, errMessage
 
+def findPersonInlistEmployee(person, listEmployee):
+    start = 0
+    end = len(listEmployee) - 1
+    mid = (start + end) // 2
+
+    while (start <= end):
+        mid = (start + end) // 2
+        if (listEmployee[mid].surname.lower() > person.surnameNorm.lower()):
+            end = mid - 1
+        elif (listEmployee[mid].surname.lower() < person.surnameNorm.lower()):
+            start = mid + 1
+        else:
+            return mid
+    return -1
+
 def findEmployeeOnFio(listNewsMember, listEmployee):
 
     isFind = False
     for member in listNewsMember:
-        for employee in listEmployee:
-            if member.surnameNorm == employee.surname and member.nameNorm == employee.name:
-                isFind = True
-                member.idPerson = employee.idperson
-                member.linkPerson = employee.link_person
+        index = findPersonInlistEmployee(member,listEmployee)
+        if index == -1:
+            pass
+        else:
+            member.idPerson = listEmployee[index].idperson
+            member.linkPerson = listEmployee[index].link_person
 
 
 
