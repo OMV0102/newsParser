@@ -304,9 +304,13 @@ def getNewsFromDbExceptParsed(year):
                 listElem = News(int(elem[0]), elem[1], elem[2], elem[3], elem[4], str(elem[5]), elem[6], bool(elem[7]), bool(elem[8]), str(elem[9]))
                 listNews.append(listElem)
 
+            if (len(listNews) == 0):
+                raise ValueError('Новостей за ' + year + ' год в БД не найдено!')
+
             if (conn != None):
                 conn.commit()
                 conn.close()
+
             return isGoodExecution, '', listNews
 
     except psycopg2.Error as errMessage:
@@ -314,15 +318,16 @@ def getNewsFromDbExceptParsed(year):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage.diag.message_primary, listNews
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки: ' + errMessage.diag.message_primary, listNews
 
     except Exception as errMessage:
         if (conn != None):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage, listNews
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки: ' + str(errMessage), listNews
 
+# функция распознаем фио в списке новостей
 def findFioInNewsByNatasha(listNews):
     try:
         isGoodExecution = True
@@ -386,6 +391,7 @@ def binarySearchSurnameInListEmployee(member, listEmployee):
             return mid
     return -1
 
+# сопоставление сотрудника распознанным фио в новости
 def findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee):
 
     for member in listNewsMember:
@@ -443,14 +449,15 @@ def findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee):
                     member.idPerson = listEmployee[index].idperson # запомнили id
                     member.linkPerson = listEmployee[index].link_person  # запомнили ссылку сотрудника
                 elif len(listIndex) > 1:
+                    pass
                     # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
                     # что делать - не знаю, поэтому ничего не делаем
                     # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
-                    pass
+                # =====================================================================================
         else:
             pass
-            # тут когда фамилия или имя пустые
-            # обрабатываем сразу отсеянных по найденным
+            # когда фамилия или имя пустые
+            # находим таких по тем кто уже найден
 
 
 
@@ -511,7 +518,7 @@ def main():
                     print('Загружаем всех сотрудников...')
                     isGoodExecution, errMessage, listEmployee = getEmployeesFromDb()
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Загружаем необработанные новости за ' + str(year) + ' год ...')
+                    print('Загружаем необработанные новости за ' + str(year) + 'год ...')
                     isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Распознаем в новостях людей...')
