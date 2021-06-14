@@ -323,13 +323,13 @@ def getNewsFromDbExceptParsed(year):
         isGoodExecution = False
         return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage, listNews
 
-def findFioInNewsByNatasha(listNews, listEmployee):
+def findFioInNewsByNatasha(listNews):
     try:
         isGoodExecution = True
         listNewsMember = []
 
         # важные объекты для работы Наташи
-        # удалить 1 строку - не будет работать
+        # удалить одну строку - не будет работать
         segmenter = Segmenter()
         morph_vocab = MorphVocab()
         emb = NewsEmbedding()
@@ -339,8 +339,6 @@ def findFioInNewsByNatasha(listNews, listEmployee):
         names_extractor = NamesExtractor(morph_vocab)
 
         for elemNews in listNews:
-            listNewsMember.clear() #очищаем список
-            flag_is_fio = False  # флаг, что изначально фио не найдены в документе
             # обрабатываем текст
             doc = Doc(elemNews.text_orig) # создаем объект из текста новости
             doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
@@ -355,30 +353,24 @@ def findFioInNewsByNatasha(listNews, listEmployee):
                     span.normalize(morph_vocab) # нормализует фио в span.normal
                     span.extract_fact(names_extractor) # заполняет фио в span.fact по полям
 
-                    # заполняем нормализованное фио, если чего-то, то ''
+                    # заполняем нормализованное фио, если чего-то нет, то пустая строка
                     name = span.fact.as_dict.get('first', '')
                     surname = span.fact.as_dict.get('last', '')
                     patronymic = span.fact.as_dict.get('middle', '')
 
-                    # запомнили всех людей в список
+                    # запомнили всех распознанных людей в список
                     elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic, False)
                     listNewsMember.append(elemNewsMember)
 
-                    # ищем в сотрудниках и удаляем из списка найденных
-                    listNewsMember = findEmployeeOnFio(listNewsMember, listEmployee)
-                    flag_is_fio = True  # нашли хоть одно фио
-
-                    print('\n')
-
-            print('\n')
-            return isGoodExecution, ''
+        return isGoodExecution, '', listNewsMember
 
     except Exception as errMessage:
         isGoodExecution = False
-        return isGoodExecution, errMessage
+        return isGoodExecution, 'Ошибка при распозновании фио в новостях:\n' + errMessage
 
-# поиск человека в списке сотрудников по фамилии
-def findPersonInlistEmployeeOnSurname(person, listEmployee):
+# двоичный поиск фамилии в списке сотрудников
+def binarySearchSurnameInListEmployee(member, listEmployee):
+    # Обычным двоичным поиском ищем человека среди сотрудников
     # возвращает индекс сотрудника в списке или -1
     start = 0
     end = len(listEmployee) - 1
@@ -386,20 +378,19 @@ def findPersonInlistEmployeeOnSurname(person, listEmployee):
 
     while start <= end:
         mid = (start + end) // 2
-        if person.surnameNorm.lower() < listEmployee[mid].surname.lower():
+        if member.surnameNorm.lower() < listEmployee[mid].surname.lower():
             end = mid - 1
-        elif person.surnameNorm.lower() > listEmployee[mid].surname.lower():
+        elif member.surnameNorm.lower() > listEmployee[mid].surname.lower():
             start = mid + 1
-        elif person.surnameNorm.lower() == listEmployee[mid].surname.lower():
+        elif member.surnameNorm.lower() == listEmployee[mid].surname.lower():
             return mid
     return -1
 
-def findEmployeeOnFio(listNewsMember, listEmployee):
-    # Обычным двоичным поиском ищем человека среди сотрудников
+def findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee):
 
     for member in listNewsMember:
         if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0:
-            index = findPersonInlistEmployeeOnSurname(member,listEmployee)
+            index = binarySearchSurnameInListEmployee(member,listEmployee)
             if index < 0:
                 pass # ничего не делаем, т.к. не найден ни один сотрудник с такой фамилией
             else:
@@ -429,19 +420,37 @@ def findEmployeeOnFio(listNewsMember, listEmployee):
                         flag = False
                 # =============================================================
                 # теперь просматриваем сотрудников по индексу И
-                # провереям совпадают ли хотябы первые буквы имен c именем в member, если нет индекс удаляем
+                # провереям совпадают ли имена c именем в member, если нет - индекс удаляем
                 for i in listIndex:
-                    if(member.nameNorm.lower()[0] != listEmployee[i].name.lower()[0]):
+                    if(member.nameNorm.lower() != listEmployee[i].name.lower()):
                         listIndex.remove(i)
-
-
-                member.isFind = True
-                member.idPerson = listEmployee[index].idperson
-                member.linkPerson = listEmployee[index].link_person
+                # ====================================================================
+                # теперь смотрим остались ли вообще ещё кандидаты в listIndex
+                if len(listIndex) == 0:
+                    pass # ниче не делаем, а значит в цикле к след. member переходит
+                else:
+                    # если остались, то сравниваем отчества
+                    for i in listIndex:
+                        # если очества не совпали индекс удаляем
+                        if (member.patronymicNorm.lower() != listEmployee[i].patronymic.lower()):
+                            listIndex.remove(i)
+                # ======================================================================
+                # опять смотрим остались ли вообще ещё кандидаты в listIndex
+                if len(listIndex) == 0:
+                    pass # если пусто, ниче не делаем, а значит в цикле к след. member переходит
+                elif len(listIndex) == 1:
+                    member.isFind = True # сответствие нашли по полному фио
+                    member.idPerson = listEmployee[index].idperson # запомнили id
+                    member.linkPerson = listEmployee[index].link_person  # запомнили ссылку сотрудника
+                elif len(listIndex) > 1:
+                    # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
+                    # что делать - не знаю, поэтому ничего не делаем
+                    # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
+                    pass
         else:
             pass
             # тут когда фамилия или имя пустые
-            # обрабатываем сразу отсеянных по найднным
+            # обрабатываем сразу отсеянных по найденным
 
 
 
@@ -505,10 +514,15 @@ def main():
                     print('Загружаем необработанные новости за ' + str(year) + ' год ...')
                     isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year)
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Обрабатываем новости...')
-                    isGoodExecution, errMessage = findFioInNewsByNatasha(listNews, listEmployee)
+                    print('Распознаем в новостях людей...')
+                    isGoodExecution, errMessage, listNewsMember = findFioInNewsByNatasha(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Ищем распознанных людей среди сотрудников...')
+                    isGoodExecution, errMessage, listNewsMember = findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee)
+                    print('Заменяем в новостях ФИО сотрудников на ссылку его страницы...')
+
                     print('Загружаем в БД обработанные новости за ' + str(year) + ' год ...')
+
 
             elif choice == 4:
                 print('4 НЕТ')
