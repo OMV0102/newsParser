@@ -25,6 +25,7 @@ class NewsMember:
     nameNorm: str = ''
     surnameNorm: str = ''
     patronymicNorm: str = ''
+    isFind: bool = False
 
 @dataclass
 class News:
@@ -65,7 +66,6 @@ def getConnectionParametrs():
 
     return pgDatabase, pgUser, pgPassword, pgHost, pgPort
 
-
 # соединение с БД Postgres
 def getConnection(database, user, password, host, port):
     isGoodExecution = True
@@ -81,7 +81,6 @@ def getConnection(database, user, password, host, port):
     except Exception as errMessage:
         isGoodExecution = False
         return isGoodExecution, 'Не удалось подключиться к БД ' + database, conn
-
 
 # получение новостей по апи в listNews
 def getNewsFromApi(api, year):
@@ -325,80 +324,125 @@ def getNewsFromDbExceptParsed(year):
         return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки:\n' + errMessage, listNews
 
 def findFioInNewsByNatasha(listNews, listEmployee):
-    isGoodExecution = True
-    listNewsMember = []
-    #version1 = str(sys.version_info.major) + '.' + str(sys.version_info.minor) + '.' + str(sys.version_info.micro) # версия питона
-
     try:
+        isGoodExecution = True
+        listNewsMember = []
+
+        # важные объекты для работы Наташи
+        # удалить 1 строку - не будет работать
         segmenter = Segmenter()
         morph_vocab = MorphVocab()
-
         emb = NewsEmbedding()
         morph_tagger = NewsMorphTagger(emb)
-        # syntax_parser = NewsSyntaxParser(emb)
+        # syntax_parser = NewsSyntaxParser(emb) # not use
         ner_tagger = NewsNERTagger(emb)
         names_extractor = NamesExtractor(morph_vocab)
 
         for elemNews in listNews:
-            print('')
-            flag_is_fio = False # флаг, что изначально фио нет в документе
-
-            doc = Doc(elemNews.text_orig) # создаем объект из текста
+            listNewsMember.clear() #очищаем список
+            flag_is_fio = False  # флаг, что изначально фио не найдены в документе
+            # обрабатываем текст
+            doc = Doc(elemNews.text_orig) # создаем объект из текста новости
             doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
             doc.tag_morph(morph_tagger) # если это не сделать, но нормализация не сработает
             # doc.parse_syntax(syntax_parser) # not use
             doc.tag_ner(ner_tagger) # разбивает документ на теги, чтобы появились spans в doc
 
+            # смотрим распознанные сущности
             for span in doc.spans:
+                # если сущность это человек (PERson)
                 if span.type == 'PER':
-                    flag_is_fio = True # нашли хоть одно фио
                     span.normalize(morph_vocab) # нормализует фио в span.normal
                     span.extract_fact(names_extractor) # заполняет фио в span.fact по полям
-                    print('\n')
+
+                    # заполняем нормализованное фио, если чего-то, то ''
                     name = span.fact.as_dict.get('first', '')
                     surname = span.fact.as_dict.get('last', '')
                     patronymic = span.fact.as_dict.get('middle', '')
-                    print('\n')
 
-                    elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic)
+                    # запомнили всех людей в список
+                    elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic, False)
                     listNewsMember.append(elemNewsMember)
+
+                    # ищем в сотрудниках и удаляем из списка найденных
+                    listNewsMember = findEmployeeOnFio(listNewsMember, listEmployee)
+                    flag_is_fio = True  # нашли хоть одно фио
+
                     print('\n')
 
             print('\n')
-            print('\n')
-            print('\n')
-
             return isGoodExecution, ''
 
     except Exception as errMessage:
         isGoodExecution = False
         return isGoodExecution, errMessage
 
-def findPersonInlistEmployee(person, listEmployee):
+# поиск человека в списке сотрудников по фамилии
+def findPersonInlistEmployeeOnSurname(person, listEmployee):
+    # возвращает индекс сотрудника в списке или -1
     start = 0
     end = len(listEmployee) - 1
     mid = (start + end) // 2
 
-    while (start <= end):
+    while start <= end:
         mid = (start + end) // 2
-        if (listEmployee[mid].surname.lower() > person.surnameNorm.lower()):
+        if person.surnameNorm.lower() < listEmployee[mid].surname.lower():
             end = mid - 1
-        elif (listEmployee[mid].surname.lower() < person.surnameNorm.lower()):
+        elif person.surnameNorm.lower() > listEmployee[mid].surname.lower():
             start = mid + 1
-        else:
+        elif person.surnameNorm.lower() == listEmployee[mid].surname.lower():
             return mid
     return -1
 
 def findEmployeeOnFio(listNewsMember, listEmployee):
+    # Обычным двоичным поиском ищем человека среди сотрудников
 
-    isFind = False
     for member in listNewsMember:
-        index = findPersonInlistEmployee(member,listEmployee)
-        if index == -1:
-            pass
+        if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0:
+            index = findPersonInlistEmployeeOnSurname(member,listEmployee)
+            if index < 0:
+                pass # ничего не делаем, т.к. не найден ни один сотрудник с такой фамилией
+            else:
+                # ====================================================================
+                # если нашли человека с такой фамилией
+                # идем влево и вправо по списку, вдруг есть однофамильцы
+                listIndex = []
+                flag = True
+                # влево
+                i = index - 1
+                while (flag == True and index >= 0):
+                    if (listEmployee[index].surname == listEmployee[i].surname):
+                        listIndex.append(i)
+                        index = index - 1
+                    else:
+                        flag = False
+                listIndex.append(index) # между лево и право кладем сам index, чтобы по порядку
+                # вправо
+                flag = True
+                i = index + 1
+                n = len(listEmployee)
+                while (flag == True and index < n):
+                    if (listEmployee[index].surname == listEmployee[i].surname):
+                        listIndex.append(i)
+                        index = index + 1
+                    else:
+                        flag = False
+                # =============================================================
+                # теперь просматриваем сотрудников по индексу И
+                # провереям совпадают ли хотябы первые буквы имен c именем в member, если нет индекс удаляем
+                for i in listIndex:
+                    if(member.nameNorm.lower()[0] != listEmployee[i].name.lower()[0]):
+                        listIndex.remove(i)
+
+
+                member.isFind = True
+                member.idPerson = listEmployee[index].idperson
+                member.linkPerson = listEmployee[index].link_person
         else:
-            member.idPerson = listEmployee[index].idperson
-            member.linkPerson = listEmployee[index].link_person
+            pass
+            # тут когда фамилия или имя пустые
+            # обрабатываем сразу отсеянных по найднным
+
 
 
 
