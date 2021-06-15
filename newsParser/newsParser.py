@@ -28,6 +28,10 @@ class NewsMember:
     isFind: bool = False
 
 @dataclass
+class NewsParsed:
+    idNews: int
+    listMembers: list[NewsMember]
+@dataclass
 class News:
     """Структура новости"""
     id: int = 0
@@ -54,7 +58,6 @@ class Employee:
     chair_id2: int = 0
     id: int = 0
     update_ts: str = ''
-
 
 # параметры подключения к БД
 def getConnectionParametrs():
@@ -332,6 +335,7 @@ def findFioInNewsByNatasha(listNews):
     try:
         isGoodExecution = True
         listNewsMember = []
+        listNewsParsed = []
 
         # важные объекты для работы Наташи
         # удалить одну строку - не будет работать
@@ -344,6 +348,7 @@ def findFioInNewsByNatasha(listNews):
         names_extractor = NamesExtractor(morph_vocab)
 
         for elemNews in listNews:
+            listNewsMember.clear()
             # обрабатываем текст
             doc = Doc(elemNews.text_orig) # создаем объект из текста новости
             doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
@@ -366,6 +371,9 @@ def findFioInNewsByNatasha(listNews):
                     # запомнили всех распознанных людей в список
                     elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic, False)
                     listNewsMember.append(elemNewsMember)
+            elemNewsParsed = NewsParsed(elemNews.id, listNewsMember)
+            listNewsParsed.append(elemNewsParsed)
+            print('')
 
         return isGoodExecution, '', listNewsMember
 
