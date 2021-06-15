@@ -413,6 +413,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
             # если список найденных не пустой, то есть isFio == True
             if elemNewsParsed.isFio == True:
                 # ===============================================ЧАСТЬ 1==========================================================
+                # в части 1 ищем совпадения по полному совпадению ФИО среди всех сотрудников
                 for member in elemNewsParsed.listMembers:
                     if len(member.surnameNorm) > 1 and len(member.nameNorm) > 1 and len(member.patronymicNorm) > 1:
                         index = binarySearchSurnameInListEmployee(member,listEmployee)
@@ -481,6 +482,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                 # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
 
                 # ==============================================ЧАСТЬ 2=============================================================
+                # часть 2 ищем совпадения по (Фамилия И.О.) и (Фамилия Имя) СРЕДИ распознанных по полному совпалению ФИО
                 # когда уже пробежались по всем людям из новости, смотрим есть ли хотябы один найденный
                 flagFind = False
                 for elem in elemNewsParsed.listMembers:
@@ -527,6 +529,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
 
 
                 # ================================================ЧАСТЬ 3===========================================================================
+                # часть 3 ищем единственное совпадения по (Фамилия И.О.) среди всех сотрудников
                 # Здесь мы после того как нашли людей по полному фио и нашли их упоминания по (Фамилия И.О.) и (Фамилия Имя)
                 # используем первый цикл по всем и ищем там тех кто упомянут был только как (Фамилия И.О.) и такой человек нашелся один среди сотрудников
 
@@ -613,6 +616,11 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
         isGoodExecution = False
         return isGoodExecution, errMessage, listNewsParsed
 
+def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
+
+
+
+    
 
 
 def main():
@@ -625,6 +633,7 @@ def main():
 
     listNews = []  # сюда получаем новости с api
     listEmployee = []  # сюда получаем сотрудников с api
+    listNewsParsed = [] # тут храним найденных людей в новостях
     errMessage = 'Сообщение'
     flagMenu = True
 
@@ -677,8 +686,10 @@ def main():
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Ищем распознанных людей среди сотрудников...')
                     isGoodExecution, errMessage, listNewsParsed = findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee)
+                    if isGoodExecution == False: raise ValueError(errMessage)
                     print('Заменяем в новостях ФИО сотрудников на ссылку его страницы...')
-
+                    isGoodExecution, errMessage, listNews = replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews)
+                    if isGoodExecution == False: raise ValueError(errMessage)
                     print('Загружаем в БД обработанные новости за ' + str(year) + ' год ...')
 
 
@@ -699,3 +710,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
