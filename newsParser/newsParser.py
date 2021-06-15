@@ -17,7 +17,6 @@ from natasha import Doc
 @dataclass
 class NewsMember:
     """Структура найденного человека в новости"""
-    idNews: str = ''
     idPerson: str = ''
     linkPerson: str = ''
     startPos: int = 0
@@ -29,8 +28,9 @@ class NewsMember:
 
 @dataclass
 class NewsParsed:
-    idNews: int
     listMembers: list[NewsMember]
+    idNews: int = 0
+    isFio: bool = False
 @dataclass
 class News:
     """Структура новости"""
@@ -296,9 +296,9 @@ def getNewsFromDbExceptParsed(year):
                     SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
                     FROM public.news
                     WHERE is_parse = false AND EXTRACT(YEAR FROM news_date)::text = %s
-                    AND id = 132165
+                    --AND id = 132165
                     ORDER BY id
-                    --LIMIT 5
+                    LIMIT 5
                     ;"""
             data = (year, )
             cur.execute(query, data)
@@ -369,17 +369,21 @@ def findFioInNewsByNatasha(listNews):
                     patronymic = span.fact.as_dict.get('middle', '')
 
                     # запомнили всех распознанных людей в список
-                    elemNewsMember = NewsMember(elemNews.id, 0, '', span.start, span.stop, name, surname, patronymic, False)
+                    elemNewsMember = NewsMember(0, '', span.start, span.stop, name, surname, patronymic, False)
                     listNewsMember.append(elemNewsMember)
-            elemNewsParsed = NewsParsed(elemNews.id, listNewsMember)
+            # если Наташа никого не нашла, то ставим флаг False
+            if len(listNewsMember) > 0:
+                elemNewsParsed = NewsParsed(listNewsMember, elemNews.id, True)
+            else:
+                elemNewsParsed = NewsParsed(listNewsMember, elemNews.id, False)
             listNewsParsed.append(elemNewsParsed)
             print('')
 
-        return isGoodExecution, '', listNewsMember
+        return isGoodExecution, '', listNewsParsed
 
     except Exception as errMessage:
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при распозновании фио в новостях:\n' + errMessage
+        return isGoodExecution, 'Ошибка при распозновании фио в новостях:\n' + errMessage, listNewsParsed
 
 # двоичный поиск фамилии в списке сотрудников
 def binarySearchSurnameInListEmployee(member, listEmployee):
@@ -400,72 +404,74 @@ def binarySearchSurnameInListEmployee(member, listEmployee):
     return -1
 
 # сопоставление сотрудника распознанным фио в новости
-def findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee):
-
-    for member in listNewsMember:
-        if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0:
-            index = binarySearchSurnameInListEmployee(member,listEmployee)
-            if index < 0:
-                pass # ничего не делаем, т.к. не найден ни один сотрудник с такой фамилией
-            else:
-                # ====================================================================
-                # если нашли человека с такой фамилией
-                # идем влево и вправо по списку, вдруг есть однофамильцы
-                listIndex = []
-                flag = True
-                # влево
-                i = index - 1
-                while (flag == True and index >= 0):
-                    if (listEmployee[index].surname == listEmployee[i].surname):
-                        listIndex.append(i)
-                        index = index - 1
+def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
+    for elemNewsParsed in listNewsParsed:
+        if elemNewsParsed.isFio == True:
+            # если список найденных не пустой, то есть isFio == True
+            for member in elemNewsParsed.listMembers:
+                if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0:
+                    index = binarySearchSurnameInListEmployee(member,listEmployee)
+                    if index < 0:
+                        pass # ничего не делаем, т.к. не найден ни один сотрудник с такой фамилией
                     else:
-                        flag = False
-                listIndex.append(index) # между лево и право кладем сам index, чтобы по порядку
-                # вправо
-                flag = True
-                i = index + 1
-                n = len(listEmployee)
-                while (flag == True and index < n):
-                    if (listEmployee[index].surname == listEmployee[i].surname):
-                        listIndex.append(i)
-                        index = index + 1
-                    else:
-                        flag = False
-                # =============================================================
-                # теперь просматриваем сотрудников по индексу И
-                # провереям совпадают ли имена c именем в member, если нет - индекс удаляем
-                for i in listIndex:
-                    if(member.nameNorm.lower() != listEmployee[i].name.lower()):
-                        listIndex.remove(i)
-                # ====================================================================
-                # теперь смотрим остались ли вообще ещё кандидаты в listIndex
-                if len(listIndex) == 0:
-                    pass # ниче не делаем, а значит в цикле к след. member переходит
+                        # ====================================================================
+                        # если нашли человека с такой фамилией
+                        # идем влево и вправо по списку, вдруг есть однофамильцы
+                        listIndex = []
+                        flag = True
+                        # влево
+                        i = index - 1
+                        while (flag == True and index >= 0):
+                            if (listEmployee[index].surname == listEmployee[i].surname):
+                                listIndex.append(i)
+                                index = index - 1
+                            else:
+                                flag = False
+                        listIndex.append(index) # между лево и право кладем сам index, чтобы по порядку
+                        # вправо
+                        flag = True
+                        i = index + 1
+                        n = len(listEmployee)
+                        while (flag == True and index < n):
+                            if (listEmployee[index].surname == listEmployee[i].surname):
+                                listIndex.append(i)
+                                index = index + 1
+                            else:
+                                flag = False
+                        # =============================================================
+                        # теперь просматриваем сотрудников по индексу И
+                        # провереям совпадают ли имена c именем в member, если нет - индекс удаляем
+                        for i in listIndex:
+                            if(member.nameNorm.lower() != listEmployee[i].name.lower()):
+                                listIndex.remove(i)
+                        # ====================================================================
+                        # теперь смотрим остались ли вообще ещё кандидаты в listIndex
+                        if len(listIndex) == 0:
+                            pass # ниче не делаем, а значит в цикле к след. member переходит
+                        else:
+                            # если остались, то сравниваем отчества
+                            for i in listIndex:
+                                # если очества не совпали индекс удаляем
+                                if (member.patronymicNorm.lower() != listEmployee[i].patronymic.lower()):
+                                    listIndex.remove(i)
+                        # ======================================================================
+                        # опять смотрим остались ли вообще ещё кандидаты в listIndex
+                        if len(listIndex) == 0:
+                            pass # если пусто, ниче не делаем, а значит в цикле к след. member переходит
+                        elif len(listIndex) == 1:
+                            member.isFind = True # сответствие нашли по полному фио
+                            member.idPerson = listEmployee[index].idperson # запомнили id
+                            member.linkPerson = listEmployee[index].link_person  # запомнили ссылку сотрудника
+                        elif len(listIndex) > 1:
+                            pass
+                            # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
+                            # что делать - не знаю, поэтому ничего не делаем
+                            # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
+                        # =====================================================================================
                 else:
-                    # если остались, то сравниваем отчества
-                    for i in listIndex:
-                        # если очества не совпали индекс удаляем
-                        if (member.patronymicNorm.lower() != listEmployee[i].patronymic.lower()):
-                            listIndex.remove(i)
-                # ======================================================================
-                # опять смотрим остались ли вообще ещё кандидаты в listIndex
-                if len(listIndex) == 0:
-                    pass # если пусто, ниче не делаем, а значит в цикле к след. member переходит
-                elif len(listIndex) == 1:
-                    member.isFind = True # сответствие нашли по полному фио
-                    member.idPerson = listEmployee[index].idperson # запомнили id
-                    member.linkPerson = listEmployee[index].link_person  # запомнили ссылку сотрудника
-                elif len(listIndex) > 1:
                     pass
-                    # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
-                    # что делать - не знаю, поэтому ничего не делаем
-                    # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
-                # =====================================================================================
-        else:
-            pass
-            # когда фамилия или имя пустые
-            # находим таких по тем кто уже найден
+                    # когда фамилия или имя пустые
+                    # находим таких по тем кто уже найден
 
 
 
@@ -530,10 +536,10 @@ def main():
                     isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Распознаем в новостях людей...')
-                    isGoodExecution, errMessage, listNewsMember = findFioInNewsByNatasha(listNews)
+                    isGoodExecution, errMessage, listNewsParsed = findFioInNewsByNatasha(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Ищем распознанных людей среди сотрудников...')
-                    isGoodExecution, errMessage, listNewsMember = findPersonInlistEmployeeOnSurname(listNewsMember, listEmployee)
+                    isGoodExecution, errMessage, listNewsParsed = findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee)
                     print('Заменяем в новостях ФИО сотрудников на ссылку его страницы...')
 
                     print('Загружаем в БД обработанные новости за ' + str(year) + ' год ...')
