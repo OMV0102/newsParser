@@ -672,6 +672,9 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
 
     try:
         isGoodExecution = True
+        linkPart1 = '<a href="'
+        linkPart2 = '" target="_blank" rel="noopener">'
+        linkPart3 = '</a>'
 
         for elemNewsParsed in listNewsParsed:
             index = findIndexInListNewsOnIdNews(elemNewsParsed.idNews, listNews) # индекс новости по id
@@ -690,8 +693,25 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     elemNewsParsed.listMembers = deleteNotFindMembersFromlistMembersInListNewsParsed(elemNewsParsed.listMembers) # удалили нераспознанных members
                     elemNewsParsed.listMembers = sortListMembersOnStartPosition(elemNewsParsed.listMembers) # отсортировали ListMembers
 
-                    
-                    print('')
+                    # формируем новый текст новости
+                    newText = listNews[index].text_orig # новый текст изначально равен оригинальному, в нем и делаем замену
+
+                    n = len(elemNewsParsed.listMembers)
+                    for j in range(0, n):
+                        member = elemNewsParsed.listMembers[j]
+                        start = member.startPos # начало замены
+                        end = member.stopPos # конец замены
+                        fioText = listNews[index].text_orig[start:end]
+                        linkText = linkPart1 + str(member.linkPerson) + linkPart2 + fioText + linkPart3
+                        fioSize = len(fioText)
+                        linkSize = len(linkText)
+                        diffSize = linkSize - fioSize# + 1
+
+                        newText = newText[0:start] + linkText + newText[start+fioSize:] # сформировали новый текст
+
+                        print('')
+
+                print('')
 
 
 
