@@ -284,7 +284,7 @@ def getEmployeesFromDb():
 # получение новостей из БД кроме уже обработанных
 # LIMIT  для отладки
 # WHERE для отладки
-def getNewsFromDbExceptParsed(year):
+def getNewsFromDbExceptParsed(year, is_parse, is_fio):
     isGoodExecution = True
     listNews = []
     conn = None
@@ -298,13 +298,16 @@ def getNewsFromDbExceptParsed(year):
             query = """
                     SELECT id, url, title_orig, text_orig, shorttext, news_date, text_parse, is_parse, is_fio, update_ts
                     FROM public.news
-                    WHERE is_parse = false AND EXTRACT(YEAR FROM news_date)::text = %s
+                    WHERE EXTRACT(YEAR FROM news_date)::text = %s
+                    AND is_parse = %s::boolean
+                    AND (is_fio = %s::boolean OR is_fio != %s::boolean)
                     --AND id = 132165
                     AND id = 132003
                     ORDER BY id
                     --LIMIT 5
                     ;"""
-            data = (year, )
+            data = (year, is_parse, is_fio, is_fio, )
+            # data = (year, is_parse, )
             cur.execute(query, data)
             responseList = cur.fetchall()
             for elem in responseList:
@@ -314,21 +317,21 @@ def getNewsFromDbExceptParsed(year):
             if (len(listNews) == 0):
                 raise ValueError('Новостей за ' + year + ' год в БД не найдено!')
 
-            if (conn != None):
+            if (conn != None and conn.closed == 0):
                 conn.commit()
                 conn.close()
 
             return isGoodExecution, '', listNews
 
     except psycopg2.Error as errMessage:
-        if (conn != None):
+        if (conn != None and conn.closed == 0):
             conn.rollback()
             conn.close()
         isGoodExecution = False
         return isGoodExecution, 'Ошибка при загрузке полученных новостей из БД для из обработки: ' + errMessage.diag.message_primary, listNews
 
     except Exception as errMessage:
-        if (conn != None):
+        if (conn != None and conn.closed == 0):
             conn.rollback()
             conn.close()
         isGoodExecution = False
@@ -649,6 +652,21 @@ def findIndexInListNewsOnIdNews(idNews, listNews):
 
     return -1
 
+# удаление не распознанных людей из списка в ListNewsParsed
+def deleteNotFindMembersFromlistMembersInListNewsParsed(listMembers):
+    i = 0
+    while i < len(listMembers):
+        if (listMembers[i].isFind == False):
+            listMembers.pop(i)
+            i = i - 1
+        i = i + 1
+    return listMembers
+
+# сортировка ListMembers по StartPosition
+def sortListMembersOnStartPosition(listMembers):
+    listMembers = sorted(listMembers, key=lambda x: x.startPos)
+    return listMembers
+
 # замена фио на ссылки найденных сотрудников
 def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
 
@@ -656,9 +674,24 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
         isGoodExecution = True
 
         for elemNewsParsed in listNewsParsed:
+            index = findIndexInListNewsOnIdNews(elemNewsParsed.idNews, listNews) # индекс новости по id
+            if (index < 0 or index >= len(listNews)): # если вдруг индекс не найден, то ничего не делаем
+                pass
+            else:
+                # индекс новости нашли
+                listNews[index].is_parse = True # в любом случае ставим что мы обработали новость
 
+                if elemNewsParsed.isFio == False:
+                    # если в новости не найдены люди (или найдены, но не распознанны как сотрудники)
+                    listNews[index].is_fio = False #ставим флаг
+                    # listNews[index].text_parse = listNews[index].text_orig  # текст парсенный пусть пустой
+                else:
+                    # если все таки у нас найденный люди и нужна замена
+                    elemNewsParsed.listMembers = deleteNotFindMembersFromlistMembersInListNewsParsed(elemNewsParsed.listMembers) # удалили нераспознанных members
+                    elemNewsParsed.listMembers = sortListMembersOnStartPosition(elemNewsParsed.listMembers) # отсортировали ListMembers
 
-
+                    
+                    print('')
 
 
 
@@ -724,8 +757,8 @@ def main():
                     print('Загружаем всех сотрудников...')
                     isGoodExecution, errMessage, listEmployee = getEmployeesFromDb()
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Загружаем необработанные новости за ' + str(year) + 'год ...')
-                    isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year)
+                    print('Загружаем необработанные новости за ' + str(year) + ' год ...')
+                    isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year, False, False)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Распознаем в новостях людей...')
                     isGoodExecution, errMessage, listNewsParsed = findFioInNewsByNatasha(listNews)
