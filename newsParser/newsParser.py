@@ -297,8 +297,9 @@ def getNewsFromDbExceptParsed(year):
                     FROM public.news
                     WHERE is_parse = false AND EXTRACT(YEAR FROM news_date)::text = %s
                     --AND id = 132165
+                    AND id = 132067
                     ORDER BY id
-                    LIMIT 5
+                    --LIMIT 5
                     ;"""
             data = (year, )
             cur.execute(query, data)
@@ -391,7 +392,6 @@ def binarySearchSurnameInListEmployee(member, listEmployee):
     # возвращает индекс сотрудника в списке или -1
     start = 0
     end = len(listEmployee) - 1
-    mid = (start + end) // 2
 
     while start <= end:
         mid = (start + end) // 2
@@ -401,6 +401,7 @@ def binarySearchSurnameInListEmployee(member, listEmployee):
             start = mid + 1
         elif member.surnameNorm.lower() == listEmployee[mid].surname.lower():
             return mid
+
     return -1
 
 # сопоставление сотрудника распознанным фио в новости
@@ -409,7 +410,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
         if elemNewsParsed.isFio == True:
             # если список найденных не пустой, то есть isFio == True
             for member in elemNewsParsed.listMembers:
-                if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0:
+                if len(member.surnameNorm) > 0 and len(member.nameNorm) > 0 and len(member.patronymicNorm) > 0:
                     index = binarySearchSurnameInListEmployee(member,listEmployee)
                     if index < 0:
                         pass # ничего не делаем, т.к. не найден ни один сотрудник с такой фамилией
@@ -424,7 +425,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                         while (flag == True and index >= 0):
                             if (listEmployee[index].surname == listEmployee[i].surname):
                                 listIndex.append(i)
-                                index = index - 1
+                                i = i - 1
                             else:
                                 flag = False
                         listIndex.append(index) # между лево и право кладем сам index, чтобы по порядку
@@ -435,36 +436,43 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                         while (flag == True and index < n):
                             if (listEmployee[index].surname == listEmployee[i].surname):
                                 listIndex.append(i)
-                                index = index + 1
+                                i = i + 1
                             else:
                                 flag = False
                         # =============================================================
                         # теперь просматриваем сотрудников по индексу И
                         # провереям совпадают ли имена c именем в member, если нет - индекс удаляем
-                        for i in listIndex:
-                            if(member.nameNorm.lower() != listEmployee[i].name.lower()):
-                                listIndex.remove(i)
+                        i = 0
+                        while i < len(listIndex):
+                            if(member.nameNorm.lower() != listEmployee[listIndex[i]].name.lower()):
+                                listIndex.pop(i)
+                                i = i - 1
+                            i = i + 1
                         # ====================================================================
                         # теперь смотрим остались ли вообще ещё кандидаты в listIndex
                         if len(listIndex) == 0:
                             pass # ниче не делаем, а значит в цикле к след. member переходит
                         else:
                             # если остались, то сравниваем отчества
-                            for i in listIndex:
+                            i = 0
+                            while i < len(listIndex):
                                 # если очества не совпали индекс удаляем
-                                if (member.patronymicNorm.lower() != listEmployee[i].patronymic.lower()):
-                                    listIndex.remove(i)
+                                if (member.patronymicNorm.lower() != listEmployee[listIndex[i]].patronymic.lower()):
+                                    listIndex.pop(i)
+                                    i = i - 1
+                                i = i + 1
                         # ======================================================================
                         # опять смотрим остались ли вообще ещё кандидаты в listIndex
                         if len(listIndex) == 0:
                             pass # если пусто, ниче не делаем, а значит в цикле к след. member переходит
                         elif len(listIndex) == 1:
                             member.isFind = True # сответствие нашли по полному фио
-                            member.idPerson = listEmployee[index].idperson # запомнили id
-                            member.linkPerson = listEmployee[index].link_person  # запомнили ссылку сотрудника
+                            member.idPerson = listEmployee[listIndex[0]].idperson # запомнили id
+                            member.linkPerson = listEmployee[listIndex[0]].link_person  # запомнили ссылку сотрудника
                         elif len(listIndex) > 1:
                             pass
                             # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
+                            # индексы лежат в listIndex
                             # что делать - не знаю, поэтому ничего не делаем
                             # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
 
@@ -475,20 +483,45 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                 if(elem.isFind == True):
                     flagFind = True
 
-            # если совсем ни одного не смогли найти по полному фио, то ставим в новости что  isFio = False
+            # если совсем ни одного не смогли найти по полному фио, то ставим в новости что  isFio = False и всё  к след. новости
             if (flagFind == False):
                 elemNewsParsed.isFio = False
             else:
+                # =============================================================================================
+                # иначе ставим, что хоть кто-то да найден
                 elemNewsParsed.isFio = True
+                # теперь будем пытаться искать ненайденных по уже найденным
+                # =============================================================================================
+                # рассматриваем случай, когда человека упомянули по тексту как (Фамилия И.О.)
+                for elem1 in elemNewsParsed.listMembers:
+                    # нераспознанный с инициалами
+                    if (elem1.isFind == False and len(elem1.surnameNorm) > 0 and len(elem1.nameNorm) > 0 and len(elem1.patronymicNorm) > 0):
+                        # нашли нераспознанного
+                        for elem2 in elemNewsParsed.listMembers:
+                            # ищем среди распознанных по полному фио
+                            if (elem2.isFind == True):
+                                if (elem1.surnameNorm.lower() == elem2.surnameNorm.lower() and elem1.nameNorm.lower()[0] == elem2.nameNorm.lower()[0] and elem1.patronymicNorm.lower()[0] == elem2.patronymicNorm.lower()[0]):
+                                    # если вдруг нашли, ставим флаг, ид и ссылку
+                                    elem1.isFind = True
+                                    elem1.idPerson = elem2.idPerson
+                                    elem1.linkPerson = elem2.linkPerson
 
+                # =============================================================================================
+                # рассматриваем случай, когда человека упомянули по тексту как (Фамилия Имя)
+                for elem1 in elemNewsParsed.listMembers:
+                    # нераспознанный с инициалами
+                    if (elem1.isFind == False and len(elem1.surnameNorm) > 0 and len(elem1.nameNorm) > 0):
+                        # нашли нераспознанного
+                        for elem2 in elemNewsParsed.listMembers:
+                            # ищем среди распознанных по полному фио
+                            if (elem2.isFind == True):
+                                if (elem1.surnameNorm.lower() == elem2.surnameNorm.lower() and elem1.nameNorm.lower() == elem2.nameNorm.lower()):
+                                    # если вдруг нашли, ставим флаг, ид и ссылку
+                                    elem1.isFind = True
+                                    elem1.idPerson = elem2.idPerson
+                                    elem1.linkPerson = elem2.linkPerson
 
-            print('')
-            # =============================================================================================
-            pass
-            # когда фамилия или имя пустые
-            # находим таких по тем кто уже найден, если есть такие вообще
-
-
+    print('')
 
 
 
