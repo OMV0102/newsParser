@@ -301,8 +301,8 @@ def getNewsFromDbExceptParsed(year, is_parse, is_fio):
                     WHERE EXTRACT(YEAR FROM news_date)::text = %s
                     AND is_parse = %s::boolean
                     AND (is_fio = %s::boolean OR is_fio != %s::boolean)
-                    --AND id = 132165
-                    AND id = 132003
+                    AND id = 132165
+                    --AND id = 132003
                     ORDER BY id
                     --LIMIT 5
                     ;"""
@@ -698,22 +698,20 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     diffSize = 0
                     n = len(elemNewsParsed.listMembers)
                     for i in range(0, n):
-                        member = elemNewsParsed.listMembers[i]
                         # newText = oldText
-                        start = member.startPos # начало замены
-                        end = member.stopPos # конец замены
+                        start = elemNewsParsed.listMembers[i].startPos # начало замены
+                        end = elemNewsParsed.listMembers[i].stopPos # конец замены
                         fioText = newText[start:end]
-                        linkText = linkPart1 + str(member.linkPerson) + linkPart2 + fioText + linkPart3
+                        linkText = linkPart1 + str(elemNewsParsed.listMembers[i].linkPerson) + linkPart2 + fioText + linkPart3
                         fioSize = len(fioText)
                         linkSize = len(linkText)
-                        diffSize = diffSize + (linkSize - fioSize + 1)
+                        diffSize = linkSize - fioSize
 
-                        newText = newText[0:start] + linkText + newText[start+fioSize:] # сформировали новый текст
+                        newText = (newText[0:start] + linkText + newText[start+fioSize:]) # сформировали новый текст
 
                         for j in range(i+1, n):
-                            member2 = elemNewsParsed.listMembers[i]
-                            member2.startPos = member2.startPos + diffSize
-                            member2.stopPos = member2.stopPos + diffSize
+                            elemNewsParsed.listMembers[j].startPos = elemNewsParsed.listMembers[j].startPos + diffSize
+                            elemNewsParsed.listMembers[j].stopPos = elemNewsParsed.listMembers[j].stopPos + diffSize
 
                         # oldText = newText
                         print('')
