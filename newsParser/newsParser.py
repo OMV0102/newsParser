@@ -120,7 +120,7 @@ def loadNewsToDatabase(listNews):
         pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
         isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
         if isGoodExecution == False:
-            raise ValueError('Не удалось подключиться к БД: \n' + message)
+            raise ValueError('Не удалось подключиться к БД: ' + message)
         else:
             cur = conn.cursor()
             for el in listNews:
@@ -133,8 +133,7 @@ def loadNewsToDatabase(listNews):
                         DO UPDATE SET
                         url = %s, title_orig = %s, text_orig = %s, shorttext = %s, news_date = %s::TIMESTAMP, update_ts = %s::TIMESTAMP;"""
                 data = (
-                el.id, el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, el.text_parse, el.is_parse,
-                el.is_fio,
+                el.id, el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, el.text_parse, el.is_parse, el.is_fio,
                 el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, str(datetime.now()))
                 cur.execute(query, data)
 
@@ -148,14 +147,14 @@ def loadNewsToDatabase(listNews):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД: ' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
 
     except Exception as errMessage:
         if (conn != None):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД: ' + errMessage
 
 # получение сотрудников по апи в listEmployee
 def getEmployeesFromApi(api, header, key, link):
@@ -197,7 +196,7 @@ def loadEmployeesToDatabase(listEmployee):
         pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
         isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
         if isGoodExecution == False:
-            raise ValueError('Не удалось подключиться к БД: \n' + message)
+            raise ValueError('Не удалось подключиться к БД: ' + message)
         else:
             cur = conn.cursor()
             for el in listEmployee:
@@ -225,14 +224,14 @@ def loadEmployeesToDatabase(listEmployee):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД: ' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
 
     except Exception as errMessage:
         if (conn != None):
             conn.rollback()
             conn.close()
         isGoodExecution = False
-        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД:\n' + errMessage
+        return isGoodExecution, 'Ошибка при загрузке полученных новостей в БД: ' + errMessage
 
 # проверка ввода года новостей
 def checkYearNews(year):
@@ -301,8 +300,10 @@ def getNewsFromDbExceptParsed(year, is_parse, is_fio):
                     WHERE EXTRACT(YEAR FROM news_date)::text = %s
                     AND is_parse = %s::boolean
                     AND (is_fio = %s::boolean OR is_fio != %s::boolean)
-                    AND id = 132165
+                    --AND id = 132165
                     --AND id = 132003
+                    AND id = 131881
+                    --AND id = 131928
                     ORDER BY id
                     --LIMIT 5
                     ;"""
@@ -384,7 +385,6 @@ def findFioInNewsByNatasha(listNews):
             else:
                 elemNewsParsed = NewsParsed(listNewsMember, elemNews.id, False)
             listNewsParsed.append(elemNewsParsed)
-            print('')
 
         return isGoodExecution, '', listNewsParsed
 
@@ -532,6 +532,22 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                         elem1.isFind = True
                                         elem1.idPerson = elem2.idPerson
                                         elem1.linkPerson = elem2.linkPerson
+
+                    # # =============================================================================================
+                    # # !!!!! закоментированно потому что natasha распознает (Имя Отчество) с ошибкой, отчество как фамилия распознается
+                    # # рассматриваем случай, когда человека упомянули по тексту как (Имя Отчество)
+                    # for elem1 in elemNewsParsed.listMembers:
+                    #     # нераспознанный с инициалами
+                    #     if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) > 1):
+                    #         # нашли нераспознанного
+                    #         for elem2 in elemNewsParsed.listMembers:
+                    #             # ищем среди распознанных по полному фио
+                    #             if (elem2.isFind == True):
+                    #                 if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.patronymicNorm.lower() == elem2.patronymicNorm.lower()):
+                    #                     # если вдруг нашли, ставим флаг, ид и ссылку
+                    #                     elem1.isFind = True
+                    #                     elem1.idPerson = elem2.idPerson
+                    #                     elem1.linkPerson = elem2.linkPerson
 
 
                 # ================================================ЧАСТЬ 3===========================================================================
@@ -698,28 +714,24 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     diffSize = 0
                     n = len(elemNewsParsed.listMembers)
                     for i in range(0, n):
-                        # newText = oldText
                         start = elemNewsParsed.listMembers[i].startPos # начало замены
                         end = elemNewsParsed.listMembers[i].stopPos # конец замены
                         fioText = newText[start:end]
+                        # строим ссылку
                         linkText = linkPart1 + str(elemNewsParsed.listMembers[i].linkPerson) + linkPart2 + fioText + linkPart3
                         fioSize = len(fioText)
                         linkSize = len(linkText)
-                        diffSize = linkSize - fioSize
+                        diffSize = linkSize - fioSize # разница
 
                         newText = (newText[0:start] + linkText + newText[start+fioSize:]) # сформировали новый текст
 
+                        # сдвигаем индексы у следующих людей
                         for j in range(i+1, n):
                             elemNewsParsed.listMembers[j].startPos = elemNewsParsed.listMembers[j].startPos + diffSize
                             elemNewsParsed.listMembers[j].stopPos = elemNewsParsed.listMembers[j].stopPos + diffSize
 
-                        # oldText = newText
-                        print('')
-
-                    # listNews[index].text_parse = oldText
+                    # запомнили новый текст
                     listNews[index].text_parse = newText
-                    print('')
-
 
 
         return isGoodExecution, '', listNews
@@ -728,6 +740,48 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
         isGoodExecution = False
         return isGoodExecution, 'Ошибка при замене фио на ссылки в новостях: ' + str(errMessage), listNews
 
+# обновление обработанных новостей в БД
+def updateNewsInDatabase(listNews):
+    isGoodExecution = True
+    conn = None
+    try:
+        pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
+        isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
+        if isGoodExecution == False:
+            raise ValueError('Не удалось подключиться к БД: \n' + message)
+        else:
+            cur = conn.cursor()
+            for el in listNews:
+                query = """ UPDATE public.news
+                            SET
+                            text_parse = %s, 
+                            is_parse = %s::boolean, 
+                            is_fio = %s::boolean, 
+                            update_ts = %s::TIMESTAMP
+                            WHERE
+                            id = %s
+                            ;"""
+                data = (el.text_parse, el.is_parse, el.is_fio, str(datetime.now()), el.id, )
+                cur.execute(query, data)
+
+            if (conn != None):
+                conn.commit()
+                conn.close()
+            return isGoodExecution, ''
+
+    except psycopg2.Error as errMessage:
+        if (conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при обновлении обработанный новостей в БД: ' + errMessage.diag.message_primary + '\n' + errMessage.diag.message_detail
+
+    except Exception as errMessage:
+        if (conn != None):
+            conn.rollback()
+            conn.close()
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при обновлении обработанный новостей в БД: ' + errMessage
 
 def main():
     # Переменные
@@ -760,23 +814,24 @@ def main():
                 if (checkYearNews(year)) == False:
                     raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
                 else:
-                    print('Загрузка началась...')
+                    print('Получение новостей с api...')
                     isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, year)
                     if isGoodExecution == False: raise ValueError(errMessage)
+                    print('Загружаем новости в БД...')
                     isGoodExecution, errMessage = loadNewsToDatabase(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Новости загружены.')
 
             elif choice == 2:
-                print('Загрузка началась...')
+                print('Получение сотрудников с api...')
                 isGoodExecution, errMessage, listEmployee = getEmployeesFromApi(apiEmployee, apiHeader, apiKey, linkPerson)
                 if isGoodExecution == False: raise ValueError(errMessage)
+                print('Загружаем сотрудников в БД...')
                 isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee)
                 if isGoodExecution == False: raise ValueError(errMessage)
                 print('Сотрудники загружены.')
 
             elif choice == 3:
-                year = '2021'
                 year = input('Введите год, за который обработать новости: ')
                 if (checkYearNews(year)) == False:
                     raise ValueError('Год должен быть от 2007 по ' + str(datetime.now().year) + '!')
@@ -793,11 +848,11 @@ def main():
                     print('Ищем распознанных людей среди сотрудников...')
                     isGoodExecution, errMessage, listNewsParsed = findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee)
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Заменяем в новостях ФИО сотрудников на ссылку его страницы...')
+                    print('Заменяем в новостях ФИО сотрудников на ссылки...')
                     isGoodExecution, errMessage, listNews = replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Загружаем в БД обработанные новости за ' + str(year) + ' год ...')
-
+                    isGoodExecution, errMessage = updateNewsInDatabase(listNews)
 
             elif choice == 4:
                 print('4 НЕТ')
