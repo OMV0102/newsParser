@@ -686,7 +686,7 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
 
                 if elemNewsParsed.isFio == False:
                     # если в новости не найдены люди (или найдены, но не распознанны как сотрудники)
-                    listNews[index].is_fio = False #ставим флаг
+                    listNews[index].is_fio = False # ставим флаг
                     # listNews[index].text_parse = listNews[index].text_orig  # текст парсенный пусть пустой
                 else:
                     # если все таки у нас найденный люди и нужна замена
@@ -695,23 +695,32 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
 
                     # формируем новый текст новости
                     newText = listNews[index].text_orig # новый текст изначально равен оригинальному, в нем и делаем замену
-
+                    diffSize = 0
                     n = len(elemNewsParsed.listMembers)
-                    for j in range(0, n):
-                        member = elemNewsParsed.listMembers[j]
+                    for i in range(0, n):
+                        member = elemNewsParsed.listMembers[i]
+                        # newText = oldText
                         start = member.startPos # начало замены
                         end = member.stopPos # конец замены
-                        fioText = listNews[index].text_orig[start:end]
+                        fioText = newText[start:end]
                         linkText = linkPart1 + str(member.linkPerson) + linkPart2 + fioText + linkPart3
                         fioSize = len(fioText)
                         linkSize = len(linkText)
-                        diffSize = linkSize - fioSize# + 1
+                        diffSize = diffSize + (linkSize - fioSize + 1)
 
                         newText = newText[0:start] + linkText + newText[start+fioSize:] # сформировали новый текст
 
+                        for j in range(i+1, n):
+                            member2 = elemNewsParsed.listMembers[i]
+                            member2.startPos = member2.startPos + diffSize
+                            member2.stopPos = member2.stopPos + diffSize
+
+                        # oldText = newText
                         print('')
 
-                print('')
+                    # listNews[index].text_parse = oldText
+                    listNews[index].text_parse = newText
+                    print('')
 
 
 
