@@ -13,7 +13,8 @@ from natasha import NewsNERTagger
 from natasha import NamesExtractor
 from natasha import Doc
 
-
+# ============================
+# Структуры элементов списков
 @dataclass
 class NewsMember:
     """Структура найденного человека в новости"""
@@ -31,6 +32,7 @@ class NewsParsed:
     listMembers: list[NewsMember]
     idNews: int = 0
     isFio: bool = False
+
 @dataclass
 class News:
     """Структура новости"""
@@ -58,6 +60,7 @@ class Employee:
     chair_id2: int = 0
     id: int = 0
     update_ts: str = ''
+# =============================
 
 # параметры подключения к БД
 def getConnectionParametrs():
@@ -489,9 +492,9 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                     if(elem.isFind == True):
                         flagFind = True
 
-                # если совсем ни одного не смогли найти по полному фио, то ставим в новости что  isFio = False и всё  к след. новости
-                if (flagFind == False):
-                    elemNewsParsed.isFio = False
+                # если  есть хоть один найденный по полному фио, то ставим в новости что  isFio = True и всё  к след. новости
+                if (flagFind == True):
+                    elemNewsParsed.isFio = True
                 else:
                     # =============================================================================================
                     # иначе ставим, что хоть кто-то да найден
@@ -609,18 +612,61 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                     # индексы лежат в listIndex
                                     # раз несколько кандидатов, то мы точно не знаем кто из них кто и лучше пусть (Фамилия И.О.) будет без ссылки
                                     # но по хорошему опять же тут нужно давать выбор, ЕСЛИ это обработка при регистрации новой новости
+                    # опять проверяем смогли ли мы найти кого-то
+                    flagFind = False
+                    for elem in elemNewsParsed.listMembers:
+                        if (elem.isFind == True):
+                            flagFind = True
+
+                    # если  есть хоть один найденный по полному фио, то ставим в новости что  isFio = True и всё  к след. новости
+                    if (flagFind == True):
+                        elemNewsParsed.isFio = True
+
+
+
 
         return isGoodExecution, '', listNewsParsed
 
     except Exception as errMessage:
         isGoodExecution = False
-        return isGoodExecution, errMessage, listNewsParsed
+        return isGoodExecution, 'Ошибка при сопоставлении фио и сотрудников: \n' + str(errMessage), listNewsParsed
 
+# двоичный поиск индекса новости в списке новостей по ID новости
+def findIndexInListNewsOnIdNews(idNews, listNews):
+    # Обычным двоичным поиском ищем индекс новости
+    # возвращает индекс новости в списке listNews или -1
+    start = 0
+    end = len(listNews) - 1
+
+    while start <= end:
+        mid = (start + end) // 2
+        if idNews < listNews[mid].id:
+            end = mid - 1
+        elif idNews > listNews[mid].id:
+            start = mid + 1
+        elif idNews == listNews[mid].id:
+            return mid
+
+    return -1
+
+# замена фио на ссылки найденных сотрудников
 def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
 
+    try:
+        isGoodExecution = True
+
+        for elemNewsParsed in listNewsParsed:
 
 
-    
+
+
+
+
+        return isGoodExecution, '', listNews
+
+    except Exception as errMessage:
+        isGoodExecution = False
+        return isGoodExecution, 'Ошибка при замене фио на ссылки в новостях: ' + str(errMessage), listNews
 
 
 def main():
@@ -710,4 +756,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
