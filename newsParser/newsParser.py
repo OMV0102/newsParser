@@ -326,7 +326,7 @@ def getNewsFromDbExceptParsed(year, is_parse):
                 listNews.append(listElem)
 
             if (len(listNews) == 0):
-                raise ValueError('Новостей за ' + year + ' год в БД не найдено!')
+                raise ValueError('Необработанных новостей за ' + year + ' год в БД не найдено!')
 
             if (conn != None and conn.closed == 0):
                 conn.commit()
@@ -340,7 +340,7 @@ def getNewsFromDbExceptParsed(year, is_parse):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей из БД для из обработки: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail), listNews
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей из БД для их обработки: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail), listNews
 
     except Exception as errMessage:
         if (conn != None and conn.closed == 0):
@@ -348,7 +348,7 @@ def getNewsFromDbExceptParsed(year, is_parse):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей из БД для из обработки: ' + str(errMessage), listNews
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей из БД для их обработки: ' + str(errMessage), listNews
 
 # функция распознаем фио в списке новостей
 def findFioInNewsByNatasha(listNews):
