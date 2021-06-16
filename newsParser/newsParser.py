@@ -103,8 +103,9 @@ def getNewsFromApi(api, year):
                     if jsonElem['TEXT'] == None: text_orig = ''
                     else: text_orig = jsonElem['TEXT']
 
-                    listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], jsonElem['TEXT'],
+                    listElem = News(jsonElem['ID'], jsonElem['URL'], jsonElem['TITLE'], text_orig,
                                     jsonElem['SHORTTEXT'], jsonElem['NEWS_DATE'], '', False, False, '')
+
                     listNews.append(listElem)
 
                 return isGoodExecution, '', listNews
@@ -123,6 +124,7 @@ def loadNewsToDatabase(listNews):
     isGoodExecution = True
     conn = None
     try:
+        countNumberNews = 0 # счетскик новостей
         pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
         isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
         if isGoodExecution == False:
@@ -142,11 +144,12 @@ def loadNewsToDatabase(listNews):
                 el.id, el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, el.text_parse, el.is_parse, el.is_fio,
                 el.url, el.title_orig, el.text_orig, el.shorttext, el.news_date, str(datetime.now()))
                 cur.execute(query, data)
+                countNumberNews = countNumberNews + 1
 
             if (conn != None):
                 conn.commit()
                 conn.close()
-            return isGoodExecution, ''
+            return isGoodExecution, '', countNumberNews
 
     except psycopg2.Error as errMessage:
         if (conn != None):
@@ -154,7 +157,7 @@ def loadNewsToDatabase(listNews):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail)
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail), countNumberNews
 
     except Exception as errMessage:
         if (conn != None):
@@ -162,7 +165,7 @@ def loadNewsToDatabase(listNews):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage)
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage), countNumberNews
 
 # получение сотрудников по апи в listEmployee
 def getEmployeesFromApi(api, header, key, link):
@@ -202,6 +205,7 @@ def loadEmployeesToDatabase(listEmployee):
     isGoodExecution = True
     conn = None
     try:
+        countEmployee = 0 # счетчик сотрудников
         pgDatabase, pgUser, pgPassword, pgHost, pgPort = getConnectionParametrs()
         isGoodExecution, message, conn = getConnection(pgDatabase, pgUser, pgPassword, pgHost, pgPort)
         if isGoodExecution == False:
@@ -222,11 +226,12 @@ def loadEmployeesToDatabase(listEmployee):
                 el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2, el.id,
                 str(datetime.now()))
                 cur.execute(query, data)
+                countEmployee = countEmployee + 1
 
             if (conn != None):
                 conn.commit()
                 conn.close()
-            return isGoodExecution, ''
+            return isGoodExecution, '', countEmployee
 
     except psycopg2.Error as errMessage:
         if (conn != None):
@@ -234,7 +239,7 @@ def loadEmployeesToDatabase(listEmployee):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail)
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage.diag.message_primary) + '\n' + str(errMessage.diag.message_detail), countEmployee
 
     except Exception as errMessage:
         if (conn != None):
@@ -242,7 +247,7 @@ def loadEmployeesToDatabase(listEmployee):
             conn.close()
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage)
+        return isGoodExecution,  str(lineNum) + ': Ошибка при загрузке полученных новостей в БД: ' + str(errMessage), countEmployee
 
 # проверка ввода года новостей
 def checkYearNews(year):
@@ -383,7 +388,7 @@ def findFioInNewsByNatasha(listNews):
                     try:
                         span.normalize(morph_vocab) # нормализует фио в span.normal
                         span.extract_fact(names_extractor) # заполняет фио в span.fact по полям
-                        raise ValueError(err)
+
                         # заполняем нормализованное фио, если чего-то нет, то пустая строка
                         name = ''
                         surname = ''
@@ -399,7 +404,7 @@ def findFioInNewsByNatasha(listNews):
                                 listNewsMember.append(elemNewsMember)
                     except Exception as err:
                         # если возникли исключения ошибки при парсинге, просто пропускаем, появляются случайно
-                        continue
+                        pass
             # если Наташа никого не нашла, то ставим флаг False
             if len(listNewsMember) > 0:
                 elemNewsParsed = NewsParsed(listNewsMember.copy(), elemNews.id, True)
@@ -718,7 +723,6 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
         countIsParsedNews = 0 # сколько всего обраотали
         countIsFioNewsTrue = 0 # в скольких новостях найдены ФИО
         countIsFioNewsFalse = 0 # в скольких новостях не найдены ФИО
-        countMembersNews = 0 # количество людей, у которых появилась ссылка в новости
 
 
         for elemNewsParsed in listNewsParsed:
@@ -738,6 +742,7 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                 else:
                     # если все таки у нас найденный люди и нужна замена
                     countIsFioNewsTrue = countIsFioNewsTrue + 1 # счетчик для статистики
+
                     elemNewsParsed.listMembers = deleteNotFindMembersFromlistMembersInListNewsParsed(elemNewsParsed.listMembers) # удалили нераспознанных members
                     elemNewsParsed.listMembers = sortListMembersOnStartPosition(elemNewsParsed.listMembers) # отсортировали ListMembers
 
@@ -745,8 +750,11 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     newText = listNews[index].text_orig # новый текст изначально равен оригинальному, в нем и делаем замену
                     diffSize = 0
                     n = len(elemNewsParsed.listMembers)
+                    #флаг, что остались люди
+                    if(n > 0):
+                        listNews[index].is_fio = True  # ставим флаг
+
                     for i in range(0, n):
-                        countMembersNews = countMembersNews + 1 # счетчик статистики
                         start = elemNewsParsed.listMembers[i].startPos # начало замены
                         end = elemNewsParsed.listMembers[i].stopPos # конец замены
                         fioText = newText[start:end]
@@ -767,12 +775,12 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     listNews[index].text_parse = newText
 
 
-        return isGoodExecution, '', listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse, countMembersNews
+        return isGoodExecution, '', listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse
 
     except Exception as errMessage:
         isGoodExecution = False
         lineNum = str(traceback.format_exc()).split(",")[1]
-        return isGoodExecution,  str(lineNum) + ': Ошибка при замене фио на ссылки в новостях: ' + str(errMessage), listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse, countMembersNews
+        return isGoodExecution,  str(lineNum) + ': Ошибка при замене фио на ссылки в новостях: ' + str(errMessage), listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse
 
 # обновление обработанных новостей в БД
 def updateNewsInDatabase(listNews):
@@ -854,18 +862,18 @@ def main():
                     isGoodExecution, errMessage, listNews = getNewsFromApi(apiNews, year)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Загружаем новости в БД...')
-                    isGoodExecution, errMessage = loadNewsToDatabase(listNews)
+                    isGoodExecution, errMessage, countNumberNews = loadNewsToDatabase(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Новости загружены.')
+                    print('Новости в количестве ' + str(countNumberNews) + ' загружены.')
 
             elif choice == 2:
                 print('Получение сотрудников с api...')
                 isGoodExecution, errMessage, listEmployee = getEmployeesFromApi(apiEmployee, apiHeader, apiKey, linkPerson)
                 if isGoodExecution == False: raise ValueError(errMessage)
                 print('Загружаем сотрудников в БД...')
-                isGoodExecution, errMessage = loadEmployeesToDatabase(listEmployee)
+                isGoodExecution, errMessage, countEmployee = loadEmployeesToDatabase(listEmployee)
                 if isGoodExecution == False: raise ValueError(errMessage)
-                print('Сотрудники загружены.')
+                print('Сотрудники в количестве ' + str(countEmployee) + ' загружены.')
 
             elif choice == 3:
                 year = input('Введите год, за который обработать новости: ')
@@ -876,7 +884,7 @@ def main():
                     isGoodExecution, errMessage, listEmployee = getEmployeesFromDb()
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Загружаем необработанные новости за ' + str(year) + ' год ...')
-                    isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year, False, False)
+                    isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year, False)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Распознаем в новостях людей...')
                     start_time = time.time()
@@ -886,7 +894,7 @@ def main():
                     isGoodExecution, errMessage, listNewsParsed = findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Заменяем в новостях ФИО сотрудников на ссылки...')
-                    isGoodExecution, errMessage, listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse, countMembersNews = replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews)
+                    isGoodExecution, errMessage, listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse = replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     end_time = time.time()
                     countTimeParsed = (end_time - start_time)
@@ -900,7 +908,6 @@ def main():
                     print('Количество обработанных новостей: ' + str(countIsParsedNews))
                     print('Количество новостей, в которых распознанны сотрудники: ' + str(countIsFioNewsTrue))
                     print('Количество новостей, в которых сотрудники НЕ найдены: ' + str(countIsFioNewsFalse))
-                    print('Количество сотрудников, найденных в новостях: ' + str(countMembersNews))
 
 
             elif choice == 0:
