@@ -741,7 +741,7 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     # listNews[index].text_parse = listNews[index].text_orig  # текст парсенный пусть пустой
                 else:
                     # если все таки у нас найденный люди и нужна замена
-                    countIsFioNewsTrue = countIsFioNewsTrue + 1 # счетчик для статистики
+
 
                     elemNewsParsed.listMembers = deleteNotFindMembersFromlistMembersInListNewsParsed(elemNewsParsed.listMembers) # удалили нераспознанных members
                     elemNewsParsed.listMembers = sortListMembersOnStartPosition(elemNewsParsed.listMembers) # отсортировали ListMembers
@@ -753,6 +753,9 @@ def replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews):
                     #флаг, что остались люди
                     if(n > 0):
                         listNews[index].is_fio = True  # ставим флаг
+                        countIsFioNewsTrue = countIsFioNewsTrue + 1  # счетчик для статистики
+                    else:
+                        countIsFioNewsFalse = countIsFioNewsFalse + 1  # счетчик статистики
 
                     for i in range(0, n):
                         start = elemNewsParsed.listMembers[i].startPos # начало замены
