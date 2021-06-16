@@ -560,21 +560,22 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                         elem1.idPerson = elem2.idPerson
                                         elem1.linkPerson = elem2.linkPerson
 
-                    # # =============================================================================================
-                    # # !!!!! закоментированно потому что natasha распознает (Имя Отчество) с ошибкой, отчество как фамилия распознается
-                    # # рассматриваем случай, когда человека упомянули по тексту как (Имя Отчество)
-                    # for elem1 in elemNewsParsed.listMembers:
-                    #     # нераспознанный с инициалами
-                    #     if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) > 1):
-                    #         # нашли нераспознанного
-                    #         for elem2 in elemNewsParsed.listMembers:
-                    #             # ищем среди распознанных по полному фио
-                    #             if (elem2.isFind == True):
-                    #                 if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.patronymicNorm.lower() == elem2.patronymicNorm.lower()):
-                    #                     # если вдруг нашли, ставим флаг, ид и ссылку
-                    #                     elem1.isFind = True
-                    #                     elem1.idPerson = elem2.idPerson
-                    #                     elem1.linkPerson = elem2.linkPerson
+                    # =============================================================================================
+                    # !!!!! НЕ работает это сопоставление, потому что natasha распознает (Имя Отчество) с ошибкой: отчество как фамилия распознается
+                    # рассматриваем случай, когда человека упомянули по тексту как (Имя Отчество)
+                    for elem1 in elemNewsParsed.listMembers:
+                        # нераспознанный с инициалами
+                        if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) > 1):
+                            # нашли нераспознанного
+                            for elem2 in elemNewsParsed.listMembers:
+                                # ищем среди распознанных по полному фио
+                                if (elem2.isFind == True):
+                                    if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.patronymicNorm.lower() == elem2.patronymicNorm.lower()):
+                                        # если вдруг нашли, ставим флаг, ид и ссылку
+                                        elem1.isFind = True
+                                        elem1.idPerson = elem2.idPerson
+                                        elem1.linkPerson = elem2.linkPerson
+                    # =============================================================================================
 
 
                 # ================================================ЧАСТЬ 3===========================================================================
