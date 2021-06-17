@@ -221,8 +221,7 @@ def loadEmployeesToDatabase(listEmployee):
                         DO UPDATE SET
                         name = %s, surname = %s, patronymic = %s, link_person = %s, post = %s, chair_id = %s, chair_id2 = %s, id = %s, update_ts = %s::TIMESTAMP;"""
                 data = (
-                el.idperson, el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2,
-                el.id,
+                el.idperson, el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2, el.id,
                 el.name, el.surname, el.patronymic, el.link_person, el.post, el.chair_id, el.chair_id2, el.id,
                 str(datetime.now()))
                 cur.execute(query, data)
@@ -373,7 +372,7 @@ def findFioInNewsByNatasha(listNews):
                 listNewsMember.clear()
                 # обрабатываем текст
                 doc = Doc(elemNews.text_orig) # создаем объект из текста новости
-                doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение
+                doc.segment(segmenter) # если убрать, то tag_ner выдаст исключение (выдает исключение если длина <= 50)
                 doc.tag_morph(morph_tagger) # если это не сделать, но нормализация не сработает
                 # doc.parse_syntax(syntax_parser) # not use
                 doc.tag_ner(ner_tagger) # разбивает документ на теги, чтобы появились spans в doc
@@ -504,6 +503,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                             if len(listIndex) == 0:
                                 pass # если пусто, ниче не делаем, а значит в цикле к след. member переходит
                             elif len(listIndex) == 1:
+                                # по полному фио нашелся один человек, велика вероятность, что этот сотрудник и указан в новости
                                 member.isFind = True # сответствие нашли по полному фио
                                 member.idPerson = listEmployee[listIndex[0]].idperson # запомнили id
                                 member.linkPerson = listEmployee[listIndex[0]].link_person  # запомнили ссылку сотрудника
@@ -512,7 +512,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                 # тут ситуация когда остались индексы тех, у кого полное совпадение по фио
                                 # индексы лежат в listIndex
                                 # что делать - не знаю, поэтому ничего не делаем
-                                # но по хорошему нужно давать выбор, если это обработка при регистрации новой новости
+                                # но по хорошему нужно давать выбор, если это обработка при регистрации одной новой новости
 
                 # ==============================================ЧАСТЬ 2=============================================================
                 # часть 2 ищем совпадения по (Фамилия И.О.) и (Фамилия Имя) СРЕДИ распознанных по полному совпалению ФИО
@@ -531,7 +531,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                     elemNewsParsed.isFio = True
                     # теперь будем пытаться искать ненайденных по уже найденным
                     # =============================================================================================
-                    # рассматриваем случай, когда человека упомянули по тексту как (Фамилия И.О.)
+                    # рассматриваем случай 1, когда человека упомянули по тексту как (Фамилия И.О.)
                     for elem1 in elemNewsParsed.listMembers:
                         # нераспознанный с инициалами
                         if (elem1.isFind == False and len(elem1.surnameNorm) > 1 and len(elem1.nameNorm) > 0 and len(elem1.patronymicNorm) > 0):
@@ -546,10 +546,10 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                         elem1.linkPerson = elem2.linkPerson
 
                     # =============================================================================================
-                    # рассматриваем случай, когда человека упомянули по тексту как (Фамилия Имя)
+                    # рассматриваем случай 2, когда человека упомянули по тексту как (Фамилия Имя)
                     for elem1 in elemNewsParsed.listMembers:
                         # нераспознанный с инициалами
-                        if (elem1.isFind == False and len(elem1.surnameNorm) > 1 and len(elem1.nameNorm) > 1):
+                        if (elem1.isFind == False and len(elem1.surnameNorm) > 1 and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) == 0):
                             # нашли нераспознанного
                             for elem2 in elemNewsParsed.listMembers:
                                 # ищем среди распознанных по полному фио
@@ -562,7 +562,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
 
                     # =============================================================================================
                     # !!!!! НЕ работает это сопоставление, потому что natasha распознает (Имя Отчество) с ошибкой: отчество как фамилия распознается
-                    # рассматриваем случай, когда человека упомянули по тексту как (Имя Отчество)
+                    # рассматриваем случай 3, когда человека упомянули по тексту как (Имя Отчество)
                     for elem1 in elemNewsParsed.listMembers:
                         # нераспознанный с инициалами
                         if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) > 1):
@@ -571,6 +571,7 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                                 # ищем среди распознанных по полному фио
                                 if (elem2.isFind == True):
                                     if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.patronymicNorm.lower() == elem2.patronymicNorm.lower()):
+                                    #if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.surnameNorm.lower() == elem2.patronymicNorm.lower()):
                                         # если вдруг нашли, ставим флаг, ид и ссылку
                                         elem1.isFind = True
                                         elem1.idPerson = elem2.idPerson
@@ -890,8 +891,8 @@ def main():
                     print('Загружаем необработанные новости за ' + str(year) + ' год ...')
                     isGoodExecution, errMessage, listNews = getNewsFromDbExceptParsed(year, False)
                     if isGoodExecution == False: raise ValueError(errMessage)
-                    print('Распознаем в новостях людей...')
                     start_time = time.time()
+                    print('Распознаем в новостях людей...')
                     isGoodExecution, errMessage, listNewsParsed = findFioInNewsByNatasha(listNews)
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Ищем распознанных людей среди сотрудников...')
@@ -899,8 +900,8 @@ def main():
                     if isGoodExecution == False: raise ValueError(errMessage)
                     print('Заменяем в новостях ФИО сотрудников на ссылки...')
                     isGoodExecution, errMessage, listNews, countIsParsedNews, countIsFioNewsTrue, countIsFioNewsFalse = replaceFioInNewsOnLinkEmployee(listNewsParsed, listNews)
-                    if isGoodExecution == False: raise ValueError(errMessage)
                     end_time = time.time()
+                    if isGoodExecution == False: raise ValueError(errMessage)
                     countTimeParsed = (end_time - start_time)
                     print('Загружаем в БД обработанные новости...')
                     isGoodExecution, errMessage = updateNewsInDatabase(listNews)
