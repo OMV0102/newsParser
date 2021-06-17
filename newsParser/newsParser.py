@@ -519,12 +519,12 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
                 # когда уже пробежались по всем людям из новости, смотрим есть ли хотябы один найденный
                 flagFind = False
                 for elem in elemNewsParsed.listMembers:
-                    if(elem.isFind == True):
+                    if(flagFind == False and elem.isFind == True):
                         flagFind = True
 
                 # если  есть хоть один найденный по полному фио, то ставим в новости что  isFio = True и всё  к след. новости
-                if (flagFind == True):
-                    elemNewsParsed.isFio = True
+                if (flagFind == False):
+                    elemNewsParsed.isFio = False
                 else:
                     # =============================================================================================
                     # иначе ставим, что хоть кто-то да найден
@@ -562,16 +562,18 @@ def findPersonInlistEmployeeOnSurname(listNewsParsed, listEmployee):
 
                     # =============================================================================================
                     # !!!!! НЕ работает это сопоставление, потому что natasha распознает (Имя Отчество) с ошибкой: отчество как фамилия распознается
+                    # раскоментить два if и закоментить два других и будет работать
                     # рассматриваем случай 3, когда человека упомянули по тексту как (Имя Отчество)
                     for elem1 in elemNewsParsed.listMembers:
                         # нераспознанный с инициалами
                         if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.patronymicNorm) > 1):
+                        # if (elem1.isFind == False and len(elem1.nameNorm) > 1 and len(elem1.surnameNorm) > 1 and len(elem1.patronymicNorm) == 0):
                             # нашли нераспознанного
                             for elem2 in elemNewsParsed.listMembers:
                                 # ищем среди распознанных по полному фио
                                 if (elem2.isFind == True):
                                     if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.patronymicNorm.lower() == elem2.patronymicNorm.lower()):
-                                    #if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.surnameNorm.lower() == elem2.patronymicNorm.lower()):
+                                    # if (elem1.nameNorm.lower() == elem2.nameNorm.lower() and elem1.surnameNorm.lower() == elem2.patronymicNorm.lower()):
                                         # если вдруг нашли, ставим флаг, ид и ссылку
                                         elem1.isFind = True
                                         elem1.idPerson = elem2.idPerson
